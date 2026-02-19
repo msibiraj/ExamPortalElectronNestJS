@@ -8,7 +8,7 @@ ENV SERVICE_NAME=${SERVICE_NAME}
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 RUN npm run build:$(echo $SERVICE_NAME | sed 's/api-gateway/gateway/;s/auth-service/auth/;s/question-service/questions/;s/exam-service/exam/;s/monitor-service/monitor/')
@@ -23,7 +23,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 
 COPY --from=builder /app/dist ./dist
 
