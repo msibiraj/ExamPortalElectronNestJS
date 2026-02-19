@@ -6,14 +6,15 @@ async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     AppModule,
     {
-      transport: Transport.TCP,
+      transport: Transport.REDIS,
       options: {
-        host: '0.0.0.0',
-        port: parseInt(process.env.AUTH_SERVICE_PORT, 10) || 3001,
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
       },
     },
   );
   await app.listen();
-  console.log('Auth Microservice is listening on TCP port 3001');
+  console.log('Auth Microservice is listening via Redis');
 }
 bootstrap();

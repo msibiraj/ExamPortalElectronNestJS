@@ -15,10 +15,11 @@ import { RolesGuard } from '../guards/roles.guard';
         name: MONITOR_SERVICE,
         imports: [ConfigModule],
         useFactory: (configService: ConfigService) => ({
-          transport: Transport.TCP,
+          transport: Transport.REDIS,
           options: {
-            host: configService.get<string>('MONITOR_SERVICE_HOST', 'localhost'),
-            port: configService.get<number>('MONITOR_SERVICE_PORT', 4003),
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+            password: configService.get<string>('REDIS_PASSWORD') || undefined,
           },
         }),
         inject: [ConfigService],

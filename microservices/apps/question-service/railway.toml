@@ -1,0 +1,6 @@
+[build]
+dockerfilePath = "../../Dockerfile"
+buildArgs = { SERVICE_NAME = "question-service" }
+
+[deploy]
+startCommand = "node dist/apps/question-service/main"
