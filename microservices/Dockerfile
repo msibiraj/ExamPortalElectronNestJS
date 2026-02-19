@@ -8,7 +8,7 @@ ENV SERVICE_NAME=${SERVICE_NAME}
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --force
 
 COPY . .
 RUN npm run build:$(echo $SERVICE_NAME | sed 's/api-gateway/gateway/;s/auth-service/auth/;s/question-service/questions/;s/exam-service/exam/;s/monitor-service/monitor/')
@@ -23,7 +23,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --only=production
+RUN npm install --only=production --legacy-peer-deps
 
 COPY --from=builder /app/dist ./dist
 
