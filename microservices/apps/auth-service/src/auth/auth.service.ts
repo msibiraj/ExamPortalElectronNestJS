@@ -116,6 +116,7 @@ export class AuthService {
       };
     } catch (error) {
       if (error instanceof RpcException) throw error;
+      console.error('Refresh token error:', error);
       throw new RpcException(
         new UnauthorizedException('Invalid refresh token'),
       );
