@@ -27,4 +27,4 @@ RUN npm install --only=production --legacy-peer-deps
 
 COPY --from=builder /app/dist ./dist
 
-CMD node dist/apps/${SERVICE_NAME}/main
+CMD node dist/apps/${SERVICE_NAME}/src/main

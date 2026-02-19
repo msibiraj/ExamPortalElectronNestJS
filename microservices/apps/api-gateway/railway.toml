@@ -3,5 +3,5 @@ dockerfilePath = "../../Dockerfile"
 buildArgs = { SERVICE_NAME = "api-gateway" }
 
 [deploy]
-startCommand = "node dist/apps/api-gateway/main"
+startCommand = "node dist/apps/api-gateway/src/main"
 healthcheckPath = "/health"

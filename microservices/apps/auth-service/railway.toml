@@ -3,4 +3,4 @@ dockerfilePath = "../../Dockerfile"
 buildArgs = { SERVICE_NAME = "auth-service" }
 
 [deploy]
-startCommand = "node dist/apps/auth-service/main"
+startCommand = "node dist/apps/auth-service/src/main"
