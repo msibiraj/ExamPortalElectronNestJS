@@ -13,9 +13,6 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { MONITOR_SERVICE, MONITOR_PATTERNS, WS_EVENTS } from '@app/shared';
 
-// In-memory store: examId → Map<candidateId, { socketId, lastFrame }>
-const examFrames = new Map<string, Map<string, string>>();
-
 @WebSocketGateway({
   cors: { origin: '*', credentials: false },
   namespace: '/monitor',
@@ -74,14 +71,7 @@ export class MonitorGateway implements OnGatewayConnection, OnGatewayDisconnect 
       this.monitorClient.send(MONITOR_PATTERNS.GET_SESSIONS, { examId: data.examId }),
     ).catch(() => []);
 
-    // Attach latest frames
-    const frameMap = examFrames.get(data.examId);
-    const sessionsWithFrames = sessions.map((s: any) => ({
-      ...s,
-      lastFrame: frameMap?.get(String(s.candidateId)) ?? null,
-    }));
-
-    client.emit(WS_EVENTS.SESSION_LIST, sessionsWithFrames);
+    client.emit(WS_EVENTS.SESSION_LIST, sessions);
     this.logger.log(`Proctor joined exam room: ${data.examId}`);
   }
 
@@ -203,23 +193,9 @@ export class MonitorGateway implements OnGatewayConnection, OnGatewayDisconnect 
     });
   }
 
-  @SubscribeMessage(WS_EVENTS.CANDIDATE_FRAME)
-  handleCandidateFrame(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { examId: string; candidateId: string; frame: string },
-  ) {
-    // Store latest frame in memory (not persisted — just for live view)
-    if (!examFrames.has(data.examId)) {
-      examFrames.set(data.examId, new Map());
-    }
-    examFrames.get(data.examId).set(data.candidateId, data.frame);
-
-    // Push frame to proctors watching this exam
-    this.server.to(`proctor:${data.examId}`).emit(WS_EVENTS.FRAME_UPDATE, {
-      candidateId: data.candidateId,
-      frame: data.frame,
-    });
-  }
+  // Frame capture removed - now using WebRTC live video instead
+  // @SubscribeMessage(WS_EVENTS.CANDIDATE_FRAME)
+  // handleCandidateFrame(...) { ... }
 
   @SubscribeMessage(WS_EVENTS.CANDIDATE_PROGRESS)
   async handleCandidateProgress(
@@ -254,6 +230,43 @@ export class MonitorGateway implements OnGatewayConnection, OnGatewayDisconnect 
     this.server.to(`proctor:${data.examId}`).emit(WS_EVENTS.CANDIDATE_UPDATE, {
       candidateId: data.candidateId,
       status: 'submitted',
+    });
+  }
+
+  // ── WEBRTC SIGNALING ────────────────────────────────────────────────────────
+
+  @SubscribeMessage('webrtc.offer')
+  handleWebRTCOffer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { examId: string; candidateId: string; offer: any },
+  ) {
+    this.server.to(`candidate:${data.candidateId}`).emit('webrtc.offer', {
+      proctorSocketId: client.id,
+      offer: data.offer,
+    });
+  }
+
+  @SubscribeMessage('webrtc.answer')
+  handleWebRTCAnswer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { proctorSocketId: string; answer: any },
+  ) {
+    const meta = this.socketMeta.get(client.id);
+    this.server.to(data.proctorSocketId).emit('webrtc.answer', {
+      candidateId: meta?.candidateId,
+      answer: data.answer,
+    });
+  }
+
+  @SubscribeMessage('webrtc.ice-candidate')
+  handleWebRTCIceCandidate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { targetSocketId: string; candidate: any },
+  ) {
+    this.server.to(data.targetSocketId).emit('webrtc.ice-candidate', {
+      fromSocketId: client.id,
+      candidateId: this.socketMeta.get(client.id)?.candidateId,
+      candidate: data.candidate,
     });
   }
 
