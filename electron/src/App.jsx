@@ -76,6 +76,12 @@ export default function App() {
       {/* Live Monitor — proctor + admin only */}
       <Route path="/monitor/:examId" element={<ProctorOnly><LiveMonitor /></ProctorOnly>} />
 
+      {/* Admin — user management */}
+      <Route path="/admin/users" element={<AdminOnly><UserManagement /></AdminOnly>} />
+
+      {/* Live Monitor List */}
+      <Route path="/monitor" element={<ProctorOnly><MonitorList /></ProctorOnly>} />
+
       {/* Student Exam Session */}
       <Route path="/exam/:examId" element={<Protected><ExamSession /></Protected>} />
 

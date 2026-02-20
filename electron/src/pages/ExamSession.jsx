@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 import ConfluenceEditor from '../components/ConfluenceEditor';
+import { useAuth } from '../context/AuthContext';
 
-const API = 'http://localhost:4000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const WS_URL = `${API.replace(/\/$/, '')}/monitor`;
 
 // ── Language config ──────────────────────────────────────────────────────────
 const LANGUAGES = [
@@ -736,6 +739,7 @@ export default function ExamSession() {
   const { examId } = useParams();
   useSearchParams();
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
 
   // ── Exam state ──
   const [exam, setExam] = useState(null);
@@ -765,6 +769,104 @@ export default function ExamSession() {
   const draggingV = useRef(false);
   const draggingH = useRef(false);
 
+  // ── Monitor socket + WebRTC (student → proctor live video) ──
+  const socketRef = useRef(null);
+  const [proctorMessage, setProctorMessage] = useState(null);
+  const webcamStream = useRef(null);
+  const peerConnections = useRef({}); // proctorSocketId → RTCPeerConnection
+
+  const RTC_CONFIG = { iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ] };
+
+  useEffect(() => {
+    if (!exam || !authUser) return;
+    const token = localStorage.getItem('accessToken');
+    const candidateId = authUser.id || authUser._id;
+
+    const socket = io(WS_URL, { auth: { token } });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('candidate.join', {
+        examId,
+        candidateId,
+        candidateName: authUser.name || 'Student',
+        candidateEmail: authUser.email || '',
+        totalQuestions: exam.questions.length,
+      });
+    });
+
+    socket.on('message.received', (data) => {
+      setProctorMessage(data.message);
+      setTimeout(() => setProctorMessage(null), 10000);
+    });
+
+    socket.on('warning.received', (data) => {
+      alert(data.message || 'You have received a formal warning from the proctor.');
+    });
+
+    socket.on('exam.terminated', (data) => {
+      alert(data.reason || 'Your exam has been terminated.');
+      setSubmitted(true);
+    });
+
+    socket.on('time.extended', (data) => {
+      setProctorMessage(`Time extended by ${data.extraMinutes} minutes.`);
+      setTimeout(() => setProctorMessage(null), 8000);
+    });
+
+    // ── WebRTC: respond to proctor offers with webcam stream ──
+    socket.on('webrtc.offer', async ({ proctorSocketId, offer }) => {
+      try {
+        const stream = webcamStream.current;
+        if (!stream) return;
+
+        const pc = new RTCPeerConnection(RTC_CONFIG);
+        peerConnections.current[proctorSocketId] = pc;
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            socket.emit('webrtc.ice-candidate', {
+              targetSocketId: proctorSocketId,
+              candidate: e.candidate,
+            });
+          }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socket.emit('webrtc.answer', { proctorSocketId, answer });
+      } catch (err) {
+        console.warn('WebRTC answer failed:', err.message);
+      }
+    });
+
+    socket.on('webrtc.ice-candidate', ({ fromSocketId, candidate }) => {
+      const pc = peerConnections.current[fromSocketId];
+      if (pc && candidate) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      }
+    });
+
+    // ── Get webcam stream ──
+    navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false })
+      .then((stream) => { webcamStream.current = stream; })
+      .catch((err) => console.warn('Webcam not available:', err.message));
+
+    return () => {
+      Object.values(peerConnections.current).forEach((pc) => pc.close());
+      peerConnections.current = {};
+      if (webcamStream.current) webcamStream.current.getTracks().forEach((t) => t.stop());
+      webcamStream.current = null;
+      socket.disconnect();
+    };
+  }, [exam, examId, authUser]);
 
   // ── Timer ──
   const timer = useTimer(exam ? exam.durationMinutes * 60 : 5400);
@@ -777,13 +879,13 @@ export default function ExamSession() {
     (async () => {
       try {
         // Start / resume attempt
-        await axios.post(`${API}/student/exams/${examId}/start`, {}, { headers }).catch((err) => {
+        await axios.post(`${API}student/exams/${examId}/start`, {}, { headers }).catch((err) => {
           const msg = err?.response?.data?.message || '';
           if (msg.toLowerCase().includes('submitted')) throw new Error('ALREADY_SUBMITTED');
         });
 
         // Get schedule + paper structure
-        const { data } = await axios.get(`${API}/student/exams/${examId}/paper`, { headers });
+        const { data } = await axios.get(`${API}student/exams/${examId}/paper`, { headers });
         const { schedule, paper } = data;
 
         // Collect all questionIds from sections
@@ -795,7 +897,7 @@ export default function ExamSession() {
         // Fetch full question details in parallel
         const fetched = await Promise.all(
           uniqueIds.map((qid) =>
-            axios.get(`${API}/questions/${qid}`, { headers }).then((r) => r.data).catch(() => null),
+            axios.get(`${API}questions/${qid}`, { headers }).then((r) => r.data).catch(() => null),
           ),
         );
         const qMap = {};
@@ -913,7 +1015,7 @@ export default function ExamSession() {
         : code;
 
       const { data } = await axios.post(
-        `${API}/exam/run`,
+        `${API}exam/run`,
         { language, code: codeToRun, testCases: visibleCases },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
@@ -963,7 +1065,8 @@ export default function ExamSession() {
         }
       });
 
-      await axios.post(`${API}/student/exams/${examId}/submit`, { answers: allAnswers }, { headers });
+      await axios.post(`${API}student/exams/${examId}/submit`, { answers: allAnswers }, { headers });
+      socketRef.current?.emit('candidate.leave', { examId, candidateId: authUser?.id || authUser?._id });
       setSubmitted(true);
     } catch (err) {
       alert(err.response?.data?.message || 'Submission failed. Please try again.');
@@ -1091,6 +1194,13 @@ const passCount = runResults ? runResults.filter((r) => r.passed).length : 0;
         </div>
       </header>
 
+      {/* Proctor message banner */}
+      {proctorMessage && (
+        <div className="bg-indigo-600 text-white text-sm text-center py-2 px-4 shrink-0">
+          {proctorMessage}
+        </div>
+      )}
+
       {/* ── Main area ────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
@@ -1190,7 +1300,14 @@ const passCount = runResults ? runResults.filter((r) => r.passed).length : 0;
                 <button
                   onClick={() => {
                     const sel = mcqAnswers[question.id] || [];
-                    setAnswers((prev) => ({ ...prev, [question.id]: { type: question.type, selectedOptions: sel } }));
+                    setAnswers((prev) => {
+                      const next = { ...prev, [question.id]: { type: question.type, selectedOptions: sel } };
+                      socketRef.current?.emit('candidate.progress', {
+                        examId, candidateId: authUser?.id || authUser?._id,
+                        questionsAnswered: Object.keys(next).length,
+                      });
+                      return next;
+                    });
                     if (qIndex < exam.questions.length - 1) gotoQuestion(qIndex + 1);
                   }}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
@@ -1246,7 +1363,14 @@ const passCount = runResults ? runResults.filter((r) => r.passed).length : 0;
                 <span className="text-xs text-gray-400 font-semibold">Written Answer</span>
                 <button
                   onClick={() => {
-                    setAnswers((prev) => ({ ...prev, [question.id]: { html: descriptiveAnswers[question.id] || '' } }));
+                    setAnswers((prev) => {
+                      const next = { ...prev, [question.id]: { html: descriptiveAnswers[question.id] || '' } };
+                      socketRef.current?.emit('candidate.progress', {
+                        examId, candidateId: authUser?.id || authUser?._id,
+                        questionsAnswered: Object.keys(next).length,
+                      });
+                      return next;
+                    });
                     if (qIndex < exam.questions.length - 1) gotoQuestion(qIndex + 1);
                   }}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
@@ -1310,7 +1434,14 @@ const passCount = runResults ? runResults.filter((r) => r.passed).length : 0;
               <button
                 onClick={() => {
                   // Save answer and mark question as answered
-                  setAnswers((prev) => ({ ...prev, [question.id]: { language, code } }));
+                  setAnswers((prev) => {
+                    const next = { ...prev, [question.id]: { language, code } };
+                    socketRef.current?.emit('candidate.progress', {
+                      examId, candidateId: authUser?.id || authUser?._id,
+                      questionsAnswered: Object.keys(next).length,
+                    });
+                    return next;
+                  });
                   // Optionally auto-advance
                   if (qIndex < exam.questions.length - 1) gotoQuestion(qIndex + 1);
                 }}

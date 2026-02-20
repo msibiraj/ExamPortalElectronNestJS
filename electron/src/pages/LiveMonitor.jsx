@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import api from '../api/axios';
 
-const WS_URL = 'http://localhost:4000/monitor';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const WS_URL = `${API_BASE.replace(/\/$/, '')}/monitor`;
 
 const SEVERITY_BORDER = {
   none: 'border-green-400',
@@ -23,7 +24,18 @@ const STATUS_BADGE = {
 
 // ── Candidate Tile ────────────────────────────────────────────────────────────
 
-function CandidateTile({ session, frame, selected, onSelect, onClick, selectMode }) {
+// ── Video element that auto-attaches a MediaStream ──────────────────────────
+function StreamVideo({ stream, className }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+    }
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline muted className={className} />;
+}
+
+function CandidateTile({ session, stream, selected, onSelect, onClick, selectMode, connectionState }) {
   const border = SEVERITY_BORDER[session.highestSeverity] || 'border-gray-200';
 
   return (
@@ -51,14 +63,27 @@ function CandidateTile({ session, frame, selected, onSelect, onClick, selectMode
         </div>
       )}
 
+      {/* Connection state indicator */}
+      {connectionState && connectionState !== 'connected' && (
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-10">
+          <span className={`text-xs px-2 py-0.5 rounded-full ${
+            connectionState === 'connecting' ? 'bg-blue-500 text-white' :
+            connectionState === 'failed' ? 'bg-red-500 text-white' :
+            'bg-gray-500 text-white'
+          }`}>
+            {connectionState}
+          </span>
+        </div>
+      )}
+
       {/* Camera feed */}
       <div className="bg-gray-900 aspect-video flex items-center justify-center">
-        {frame ? (
-          <img src={frame} alt="live feed" className="w-full h-full object-cover" />
+        {stream ? (
+          <StreamVideo stream={stream} className="w-full h-full object-cover" />
         ) : (
           <div className="text-center text-gray-500">
             <div className="text-2xl mb-1">📷</div>
-            <div className="text-xs">No feed</div>
+            <div className="text-xs">{connectionState === 'connecting' ? 'Connecting...' : 'Waiting for video...'}</div>
           </div>
         )}
       </div>
@@ -87,7 +112,7 @@ function CandidateTile({ session, frame, selected, onSelect, onClick, selectMode
 
 // ── Candidate Detail Drawer ───────────────────────────────────────────────────
 
-function CandidateDrawer({ session, frame, violations, socket, examId, onClose, onSessionUpdate }) {
+function CandidateDrawer({ session, stream, violations, socket, examId, onClose, onSessionUpdate }) {
   const [msgText, setMsgText] = useState('');
   const [extendMinutes, setExtendMinutes] = useState(10);
   const [sending, setSending] = useState(false);
@@ -96,7 +121,7 @@ function CandidateDrawer({ session, frame, violations, socket, examId, onClose, 
 
   const sendMessage = () => {
     if (!msgText.trim()) return;
-    socket?.emit('proctor:send_message', {
+    socket?.emit('send.message', {
       examId,
       candidateId: String(session.candidateId),
       message: msgText,
@@ -106,7 +131,7 @@ function CandidateDrawer({ session, frame, violations, socket, examId, onClose, 
 
   const sendWarning = () => {
     if (!confirm(`Send a formal warning to ${session.candidateName}?`)) return;
-    socket?.emit('proctor:send_warning', {
+    socket?.emit('send.warning', {
       examId,
       candidateId: String(session.candidateId),
       candidateName: session.candidateName,
@@ -114,7 +139,7 @@ function CandidateDrawer({ session, frame, violations, socket, examId, onClose, 
   };
 
   const extendTime = () => {
-    socket?.emit('proctor:extend_time', {
+    socket?.emit('extend.time', {
       examId,
       candidateId: String(session.candidateId),
       minutes: extendMinutes,
@@ -126,7 +151,7 @@ function CandidateDrawer({ session, frame, violations, socket, examId, onClose, 
     setSending(true);
     try {
       await api.post(`/monitor/${examId}/candidates/${session.candidateId}/terminate`);
-      socket?.emit('proctor:terminate', {
+      socket?.emit('terminate', {
         examId,
         candidateId: String(session.candidateId),
       });
@@ -150,8 +175,8 @@ function CandidateDrawer({ session, frame, violations, socket, examId, onClose, 
       <div className="flex-1 overflow-y-auto">
         {/* Live feed enlarged */}
         <div className="bg-gray-900 aspect-video">
-          {frame ? (
-            <img src={frame} alt="live feed" className="w-full h-full object-cover" />
+          {stream ? (
+            <StreamVideo stream={stream} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-500">
               <div className="text-center">
@@ -290,8 +315,11 @@ export default function LiveMonitor() {
   const navigate = useNavigate();
 
   const socketRef = useRef(null);
+  const peerConnections = useRef({}); // candidateId → RTCPeerConnection
+
   const [sessions, setSessions] = useState({}); // candidateId → session
-  const [frames, setFrames] = useState({});    // candidateId → base64 frame
+  const [streams, setStreams] = useState({});   // candidateId → MediaStream
+  const [connectionStates, setConnectionStates] = useState({}); // candidateId → connection state
   const [violations, setViolations] = useState([]); // global feed
 
   const [selectedDrawer, setSelectedDrawer] = useState(null);
@@ -306,28 +334,110 @@ export default function LiveMonitor() {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const RTC_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  };
+
+  // ── WebRTC: Start watching a candidate ──────────────────────────────────
+
+  const startWatchingCandidate = useCallback(async (candidateId) => {
+    const id = String(candidateId);
+
+    // Already have a connection
+    if (peerConnections.current[id]) return;
+
+    setConnectionStates(prev => ({ ...prev, [id]: 'connecting' }));
+
+    try {
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      peerConnections.current[id] = pc;
+
+      // Handle incoming remote stream
+      pc.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          setStreams(prev => ({ ...prev, [id]: event.streams[0] }));
+          setConnectionStates(prev => ({ ...prev, [id]: 'connected' }));
+        }
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === 'connected') {
+          setConnectionStates(prev => ({ ...prev, [id]: 'connected' }));
+        } else if (state === 'failed' || state === 'disconnected') {
+          setConnectionStates(prev => ({ ...prev, [id]: 'failed' }));
+          // Clean up failed connection
+          setTimeout(() => {
+            if (peerConnections.current[id]?.connectionState === 'failed') {
+              peerConnections.current[id]?.close();
+              delete peerConnections.current[id];
+              setStreams(prev => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+              });
+            }
+          }, 3000);
+        }
+      };
+
+      // Send ICE candidates to candidate
+      pc.onicecandidate = (e) => {
+        if (e.candidate && socketRef.current) {
+          socketRef.current.emit('webrtc.ice-candidate', {
+            targetSocketId: sessions[id]?.socketId,
+            candidate: e.candidate,
+          });
+        }
+      };
+
+      // Create and send offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socketRef.current?.emit('webrtc.offer', {
+        examId,
+        candidateId: id,
+        offer,
+      });
+    } catch (err) {
+      console.error('Failed to start watching candidate:', err);
+      setConnectionStates(prev => ({ ...prev, [id]: 'failed' }));
+    }
+  }, [examId, sessions, RTC_CONFIG]);
+
   // ── Socket setup ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     const socket = io(WS_URL, {
       auth: { token },
-      transports: ['websocket'],
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      socket.emit('proctor:join', { examId });
+      socket.emit('proctor.join', { examId });
     });
 
-    socket.on('session:list', (list) => {
+    socket.on('session.list', (list) => {
       const map = {};
       list.forEach((s) => { map[String(s.candidateId)] = s; });
       setSessions(map);
       setLoading(false);
+
+      // Start watching all active candidates
+      list.forEach((s) => {
+        if (s.status === 'active') {
+          startWatchingCandidate(s.candidateId);
+        }
+      });
     });
 
-    socket.on('candidate:update', (update) => {
+    socket.on('candidate.update', (update) => {
       setSessions((prev) => {
         const id = String(update.candidateId);
         const existing = prev[id] || {};
@@ -342,15 +452,39 @@ export default function LiveMonitor() {
             }
           }
         }
+
+        // Start watching when candidate becomes active
+        if (update.status === 'active' && !peerConnections.current[id]) {
+          startWatchingCandidate(id);
+        }
+
         return { ...prev, [id]: merged };
       });
     });
 
-    socket.on('frame:update', ({ candidateId, frame }) => {
-      setFrames((prev) => ({ ...prev, [String(candidateId)]: frame }));
+    // ── WebRTC signaling handlers ──────────────────────────────────────────
+
+    socket.on('webrtc.answer', ({ candidateId, answer }) => {
+      const id = String(candidateId);
+      const pc = peerConnections.current[id];
+      if (pc) {
+        pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) => {
+          console.error('Failed to set remote description:', err);
+        });
+      }
     });
 
-    socket.on('violation:event', (violation) => {
+    socket.on('webrtc.ice-candidate', ({ candidateId, candidate }) => {
+      const id = String(candidateId);
+      const pc = peerConnections.current[id];
+      if (pc && candidate) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => {
+          console.error('Failed to add ICE candidate:', err);
+        });
+      }
+    });
+
+    socket.on('violation.event', (violation) => {
       setViolations((prev) => [violation, ...prev].slice(0, 200));
       if (!muteViolations && violation.severity === 'high') {
         // Audio ping for high severity (browser Audio API)
@@ -365,8 +499,13 @@ export default function LiveMonitor() {
       }
     });
 
-    return () => socket.disconnect();
-  }, [examId]);
+    return () => {
+      // Close all peer connections
+      Object.values(peerConnections.current).forEach((pc) => pc.close());
+      peerConnections.current = {};
+      socket.disconnect();
+    };
+  }, [examId, startWatchingCandidate]);
 
   // ── Drawer ────────────────────────────────────────────────────────────────
 
@@ -399,7 +538,7 @@ export default function LiveMonitor() {
     const msg = prompt('Message to send to selected candidates:');
     if (!msg) return;
     selectedIds.forEach((id) => {
-      socketRef.current?.emit('proctor:send_message', { examId, candidateId: id, message: msg });
+      socketRef.current?.emit('send.message', { examId, candidateId: id, message: msg });
     });
     setSelectMode(false);
     setSelectedIds([]);
@@ -409,7 +548,7 @@ export default function LiveMonitor() {
     if (!confirm(`Send a formal warning to ${selectedIds.length} candidates?`)) return;
     selectedIds.forEach((id) => {
       const s = sessions[id];
-      socketRef.current?.emit('proctor:send_warning', {
+      socketRef.current?.emit('send.warning', {
         examId,
         candidateId: id,
         candidateName: s?.candidateName || id,
@@ -438,7 +577,7 @@ export default function LiveMonitor() {
 
   const broadcast = () => {
     if (!broadcastText.trim()) return;
-    socketRef.current?.emit('proctor:broadcast', { examId, message: broadcastText });
+    socketRef.current?.emit('broadcast', { examId, message: broadcastText });
     setBroadcastText('');
     setShowBroadcast(false);
   };
@@ -554,7 +693,8 @@ export default function LiveMonitor() {
                   <CandidateTile
                     key={id}
                     session={session}
-                    frame={frames[id] || null}
+                    stream={streams[id] || null}
+                    connectionState={connectionStates[id]}
                     selected={selectedIds.includes(id)}
                     onSelect={toggleSelect}
                     onClick={openDrawer}
@@ -627,7 +767,7 @@ export default function LiveMonitor() {
           />
           <CandidateDrawer
             session={sessions[String(selectedDrawer.candidateId)] || selectedDrawer}
-            frame={frames[String(selectedDrawer.candidateId)] || null}
+            stream={streams[String(selectedDrawer.candidateId)] || null}
             violations={drawerViolations}
             socket={socketRef.current}
             examId={examId}
