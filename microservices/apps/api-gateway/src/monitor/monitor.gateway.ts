@@ -261,13 +261,25 @@ export class MonitorGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @SubscribeMessage('webrtc.ice-candidate')
   handleWebRTCIceCandidate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { targetSocketId: string; candidate: any },
+    @MessageBody() data: { targetSocketId?: string; candidateId?: string; candidate: any },
   ) {
-    this.server.to(data.targetSocketId).emit('webrtc.ice-candidate', {
-      fromSocketId: client.id,
-      candidateId: this.socketMeta.get(client.id)?.candidateId,
-      candidate: data.candidate,
-    });
+    const meta = this.socketMeta.get(client.id);
+
+    // If candidateId is provided, sender is proctor → route to candidate
+    if (data.candidateId) {
+      this.server.to(`candidate:${data.candidateId}`).emit('webrtc.ice-candidate', {
+        fromSocketId: client.id,
+        candidate: data.candidate,
+      });
+    }
+    // If targetSocketId is provided, sender is candidate → route to specific proctor
+    else if (data.targetSocketId) {
+      this.server.to(data.targetSocketId).emit('webrtc.ice-candidate', {
+        fromSocketId: client.id,
+        candidateId: meta?.candidateId,
+        candidate: data.candidate,
+      });
+    }
   }
 
   // ── VIOLATION REPORTING (called via HTTP from candidate app) ───────────────

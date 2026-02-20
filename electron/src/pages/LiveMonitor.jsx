@@ -349,6 +349,7 @@ export default function LiveMonitor() {
     // Already have a connection
     if (peerConnections.current[id]) return;
 
+    console.log('[WebRTC] Starting to watch candidate:', id);
     setConnectionStates(prev => ({ ...prev, [id]: 'connecting' }));
 
     try {
@@ -357,6 +358,7 @@ export default function LiveMonitor() {
 
       // Handle incoming remote stream
       pc.ontrack = (event) => {
+        console.log('[WebRTC] Received remote track for candidate:', id);
         if (event.streams && event.streams[0]) {
           setStreams(prev => ({ ...prev, [id]: event.streams[0] }));
           setConnectionStates(prev => ({ ...prev, [id]: 'connected' }));
@@ -366,6 +368,7 @@ export default function LiveMonitor() {
       // Handle connection state changes
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
+        console.log('[WebRTC] Connection state for', id, ':', state);
         if (state === 'connected') {
           setConnectionStates(prev => ({ ...prev, [id]: 'connected' }));
         } else if (state === 'failed' || state === 'disconnected') {
@@ -385,11 +388,13 @@ export default function LiveMonitor() {
         }
       };
 
-      // Send ICE candidates to candidate
+      // Send ICE candidates to candidate (via gateway routing)
       pc.onicecandidate = (e) => {
         if (e.candidate && socketRef.current) {
+          console.log('[WebRTC] Sending ICE candidate to candidate:', id);
           socketRef.current.emit('webrtc.ice-candidate', {
-            targetSocketId: sessions[id]?.socketId,
+            targetSocketId: socketRef.current.id, // Our socket ID for candidate to reply to
+            candidateId: id,
             candidate: e.candidate,
           });
         }
@@ -399,16 +404,17 @@ export default function LiveMonitor() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      console.log('[WebRTC] Sending offer to candidate:', id);
       socketRef.current?.emit('webrtc.offer', {
         examId,
         candidateId: id,
         offer,
       });
     } catch (err) {
-      console.error('Failed to start watching candidate:', err);
+      console.error('[WebRTC] Failed to start watching candidate:', err);
       setConnectionStates(prev => ({ ...prev, [id]: 'failed' }));
     }
-  }, [examId, sessions, RTC_CONFIG]);
+  }, [examId, RTC_CONFIG]);
 
   // ── Socket setup ─────────────────────────────────────────────────────────
 
@@ -466,21 +472,27 @@ export default function LiveMonitor() {
 
     socket.on('webrtc.answer', ({ candidateId, answer }) => {
       const id = String(candidateId);
+      console.log('[WebRTC] Received answer from candidate:', id);
       const pc = peerConnections.current[id];
       if (pc) {
         pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) => {
-          console.error('Failed to set remote description:', err);
+          console.error('[WebRTC] Failed to set remote description:', err);
         });
+      } else {
+        console.warn('[WebRTC] No peer connection found for candidate:', id);
       }
     });
 
-    socket.on('webrtc.ice-candidate', ({ candidateId, candidate }) => {
+    socket.on('webrtc.ice-candidate', ({ candidateId, candidate, fromSocketId }) => {
       const id = String(candidateId);
+      console.log('[WebRTC] Received ICE candidate from candidate:', id);
       const pc = peerConnections.current[id];
       if (pc && candidate) {
         pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => {
-          console.error('Failed to add ICE candidate:', err);
+          console.error('[WebRTC] Failed to add ICE candidate:', err);
         });
+      } else if (!pc) {
+        console.warn('[WebRTC] No peer connection found for ICE candidate from:', id);
       }
     });
 

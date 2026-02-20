@@ -819,17 +819,26 @@ export default function ExamSession() {
 
     // ── WebRTC: respond to proctor offers with webcam stream ──
     socket.on('webrtc.offer', async ({ proctorSocketId, offer }) => {
+      console.log('[Student WebRTC] Received offer from proctor:', proctorSocketId);
       try {
         const stream = webcamStream.current;
-        if (!stream) return;
+        if (!stream) {
+          console.warn('[Student WebRTC] No webcam stream available yet');
+          return;
+        }
 
+        console.log('[Student WebRTC] Creating peer connection with tracks:', stream.getTracks().length);
         const pc = new RTCPeerConnection(RTC_CONFIG);
         peerConnections.current[proctorSocketId] = pc;
 
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          console.log('[Student WebRTC] Adding track:', track.kind);
+          pc.addTrack(track, stream);
+        });
 
         pc.onicecandidate = (e) => {
           if (e.candidate) {
+            console.log('[Student WebRTC] Sending ICE candidate to proctor');
             socket.emit('webrtc.ice-candidate', {
               targetSocketId: proctorSocketId,
               candidate: e.candidate,
@@ -837,27 +846,41 @@ export default function ExamSession() {
           }
         };
 
+        pc.onconnectionstatechange = () => {
+          console.log('[Student WebRTC] Connection state:', pc.connectionState);
+        };
+
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
+        console.log('[Student WebRTC] Sending answer to proctor');
         socket.emit('webrtc.answer', { proctorSocketId, answer });
       } catch (err) {
-        console.warn('WebRTC answer failed:', err.message);
+        console.error('[Student WebRTC] Failed to handle offer:', err);
       }
     });
 
     socket.on('webrtc.ice-candidate', ({ fromSocketId, candidate }) => {
+      console.log('[Student WebRTC] Received ICE candidate from:', fromSocketId);
       const pc = peerConnections.current[fromSocketId];
       if (pc && candidate) {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => {
+          console.error('[Student WebRTC] Failed to add ICE candidate:', err);
+        });
+      } else if (!pc) {
+        console.warn('[Student WebRTC] No peer connection for ICE candidate from:', fromSocketId);
       }
     });
 
     // ── Get webcam stream ──
+    console.log('[Student WebRTC] Requesting webcam access...');
     navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false })
-      .then((stream) => { webcamStream.current = stream; })
-      .catch((err) => console.warn('Webcam not available:', err.message));
+      .then((stream) => {
+        webcamStream.current = stream;
+        console.log('[Student WebRTC] Webcam stream acquired with', stream.getTracks().length, 'tracks');
+      })
+      .catch((err) => console.error('[Student WebRTC] Webcam not available:', err.message));
 
     return () => {
       Object.values(peerConnections.current).forEach((pc) => pc.close());
