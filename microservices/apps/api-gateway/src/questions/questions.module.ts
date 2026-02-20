@@ -20,6 +20,7 @@ import { RolesGuard } from '../guards/roles.guard';
             host: configService.get<string>('REDISHOST') || configService.get<string>('REDIS_HOST', 'localhost'),
             port: parseInt(configService.get<string>('REDISPORT') || configService.get<string>('REDIS_PORT', '6379'), 10),
             password: configService.get<string>('REDISPASSWORD') || configService.get<string>('REDIS_PASSWORD') || undefined,
+            username: configService.get<string>('REDISUSER') || configService.get<string>('REDIS_USERNAME') || undefined,
           },
         }),
         inject: [ConfigService],
