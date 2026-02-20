@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsOptional, IsNumber, IsBoolean } from 'class-validator';
+import { IsString, IsArray, IsOptional, IsNumber, IsBoolean, IsObject } from 'class-validator';
 
 export class CreateQuestionDto {
   @IsString()
@@ -48,6 +48,18 @@ export class CreateQuestionDto {
   @IsArray()
   @IsOptional()
   allowedLanguages?: string[];
+
+  @IsOptional()
+  @IsObject()
+  timeLimits?: Record<string, number>;
+
+  @IsNumber()
+  @IsOptional()
+  memoryLimit?: number;
+
+  @IsOptional()
+  @IsObject()
+  starterCode?: Record<string, string>;
 
   @IsArray()
   @IsOptional()
