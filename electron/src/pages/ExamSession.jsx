@@ -818,16 +818,14 @@ export default function ExamSession() {
     });
 
     // ── WebRTC: respond to proctor offers with webcam stream ──
-    socket.on('webrtc.offer', async ({ proctorSocketId, offer }) => {
-      console.log('[Student WebRTC] Received offer from proctor:', proctorSocketId);
+    const pendingOffers = []; // queue offers that arrive before webcam is ready
+
+    const handleOffer = async ({ proctorSocketId, offer }) => {
+      console.log('[Student WebRTC] Handling offer from proctor:', proctorSocketId);
       try {
         const stream = webcamStream.current;
-        if (!stream) {
-          console.warn('[Student WebRTC] No webcam stream available yet');
-          return;
-        }
+        if (!stream) return;
 
-        console.log('[Student WebRTC] Creating peer connection with tracks:', stream.getTracks().length);
         const pc = new RTCPeerConnection(RTC_CONFIG);
         peerConnections.current[proctorSocketId] = pc;
 
@@ -838,7 +836,6 @@ export default function ExamSession() {
 
         pc.onicecandidate = (e) => {
           if (e.candidate) {
-            console.log('[Student WebRTC] Sending ICE candidate to proctor');
             socket.emit('webrtc.ice-candidate', {
               targetSocketId: proctorSocketId,
               candidate: e.candidate,
@@ -859,17 +856,25 @@ export default function ExamSession() {
       } catch (err) {
         console.error('[Student WebRTC] Failed to handle offer:', err);
       }
+    };
+
+    socket.on('webrtc.offer', (data) => {
+      console.log('[Student WebRTC] Received offer from proctor:', data.proctorSocketId);
+      if (!webcamStream.current) {
+        // Webcam not ready yet — queue it and process once stream is available
+        console.log('[Student WebRTC] Webcam not ready, queuing offer');
+        pendingOffers.push(data);
+      } else {
+        handleOffer(data);
+      }
     });
 
     socket.on('webrtc.ice-candidate', ({ fromSocketId, candidate }) => {
-      console.log('[Student WebRTC] Received ICE candidate from:', fromSocketId);
       const pc = peerConnections.current[fromSocketId];
       if (pc && candidate) {
         pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => {
           console.error('[Student WebRTC] Failed to add ICE candidate:', err);
         });
-      } else if (!pc) {
-        console.warn('[Student WebRTC] No peer connection for ICE candidate from:', fromSocketId);
       }
     });
 
@@ -878,7 +883,9 @@ export default function ExamSession() {
     navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false })
       .then((stream) => {
         webcamStream.current = stream;
-        console.log('[Student WebRTC] Webcam stream acquired with', stream.getTracks().length, 'tracks');
+        console.log('[Student WebRTC] Webcam stream acquired, processing', pendingOffers.length, 'pending offer(s)');
+        // Process any offers that arrived before webcam was ready
+        pendingOffers.splice(0).forEach(handleOffer);
       })
       .catch((err) => console.error('[Student WebRTC] Webcam not available:', err.message));
 
@@ -893,6 +900,42 @@ export default function ExamSession() {
 
   // ── Timer ──
   const timer = useTimer(exam ? exam.durationMinutes * 60 : 5400);
+
+  // ── Auto-submit when time expires ──
+  const autoSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (timer.expired && exam && !submitted && !submitting && !autoSubmittedRef.current) {
+      autoSubmittedRef.current = true;
+      // Auto-submit without confirm dialog
+      (async () => {
+        setSubmitting(true);
+        try {
+          const token = localStorage.getItem('accessToken');
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+          const allAnswers = [];
+          exam.questions.forEach((q) => {
+            if (q.type === 'mcq-single' || q.type === 'mcq-multiple') {
+              allAnswers.push({ questionId: q.id, type: q.type, selectedOptions: mcqAnswers[q.id] || [] });
+            } else if (q.type === 'descriptive') {
+              allAnswers.push({ questionId: q.id, type: 'descriptive', html: descriptiveAnswers[q.id] || '' });
+            } else {
+              const lang = answers[q.id]?.language || language;
+              const c = codeMap?.[`${q.id}_${lang}`] || '';
+              allAnswers.push({ questionId: q.id, type: 'programming', language: lang, code: c });
+            }
+          });
+          await axios.post(`${API}student/exams/${examId}/submit`, { answers: allAnswers }, { headers });
+          socketRef.current?.emit('candidate.leave', { examId, candidateId: authUser?.id || authUser?._id });
+          setSubmitted(true);
+        } catch {
+          // If already submitted or error, still show submitted screen
+          setSubmitted(true);
+        } finally {
+          setSubmitting(false);
+        }
+      })();
+    }
+  }, [timer.expired]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load exam ──
   useEffect(() => {
@@ -1136,6 +1179,17 @@ export default function ExamSession() {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     e.preventDefault();
+  }
+
+  // ── Auto-submitting screen (time expired, submission in progress) ──
+  if (timer.expired && submitting) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-gray-950 text-white gap-6">
+        <div className="text-5xl">⏱</div>
+        <h1 className="text-2xl font-bold">Time's Up!</h1>
+        <p className="text-gray-400">Your exam is being submitted automatically…</p>
+      </div>
+    );
   }
 
   // ── Submitted screen ──

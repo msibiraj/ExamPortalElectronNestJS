@@ -6,6 +6,13 @@ import api from '../api/axios';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const WS_URL = `${API_BASE.replace(/\/$/, '')}/monitor`;
 
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
+
 const SEVERITY_BORDER = {
   none: 'border-green-400',
   low: 'border-amber-400',
@@ -334,13 +341,6 @@ export default function LiveMonitor() {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const RTC_CONFIG = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ],
-  };
-
   // ── WebRTC: Start watching a candidate ──────────────────────────────────
 
   const startWatchingCandidate = useCallback(async (candidateId) => {
@@ -400,6 +400,9 @@ export default function LiveMonitor() {
         }
       };
 
+      // Tell the remote peer we want to receive their video (recvonly)
+      pc.addTransceiver('video', { direction: 'recvonly' });
+
       // Create and send offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -414,7 +417,12 @@ export default function LiveMonitor() {
       console.error('[WebRTC] Failed to start watching candidate:', err);
       setConnectionStates(prev => ({ ...prev, [id]: 'failed' }));
     }
-  }, [examId, RTC_CONFIG]);
+  }, [examId]);
+
+  // Keep a stable ref to startWatchingCandidate so the socket useEffect
+  // doesn't need it as a dependency (which would cause reconnects on every render)
+  const startWatchingRef = useRef(startWatchingCandidate);
+  useEffect(() => { startWatchingRef.current = startWatchingCandidate; }, [startWatchingCandidate]);
 
   // ── Socket setup ─────────────────────────────────────────────────────────
 
@@ -438,7 +446,7 @@ export default function LiveMonitor() {
       // Start watching all active candidates
       list.forEach((s) => {
         if (s.status === 'active') {
-          startWatchingCandidate(s.candidateId);
+          startWatchingRef.current(s.candidateId);
         }
       });
     });
@@ -461,7 +469,7 @@ export default function LiveMonitor() {
 
         // Start watching when candidate becomes active
         if (update.status === 'active' && !peerConnections.current[id]) {
-          startWatchingCandidate(id);
+          startWatchingRef.current(id);
         }
 
         return { ...prev, [id]: merged };
@@ -517,7 +525,7 @@ export default function LiveMonitor() {
       peerConnections.current = {};
       socket.disconnect();
     };
-  }, [examId, startWatchingCandidate]);
+  }, [examId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drawer ────────────────────────────────────────────────────────────────
 

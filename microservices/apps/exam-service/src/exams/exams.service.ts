@@ -129,13 +129,26 @@ export class ExamsService {
     const now = new Date();
     const schedules = await this.scheduleModel.find({
       enrolledStudents: new Types.ObjectId(studentId),
-      status: { $in: ['scheduled', 'active'] },
+      status: { $in: ['scheduled', 'active', 'completed'] },
     }).sort({ scheduledAt: 1 }).lean();
 
-    return schedules.map((s) => ({
-      ...s,
-      isLive: s.status === 'active' || (s.status === 'scheduled' && new Date(s.scheduledAt) <= now),
-    }));
+    return schedules.map((s) => {
+      const startTime = new Date(s.scheduledAt);
+      const endTime = new Date(startTime.getTime() + s.durationMinutes * 60_000);
+      const windowExpired = now >= endTime;
+
+      const isLive =
+        s.status === 'active' ||
+        (s.status === 'scheduled' && startTime <= now && !windowExpired);
+
+      // Treat a 'scheduled' exam whose window has closed as 'completed'
+      const displayStatus =
+        s.status === 'completed' || (s.status === 'scheduled' && windowExpired)
+          ? 'completed'
+          : s.status;
+
+      return { ...s, isLive, status: displayStatus };
+    });
   }
 
   /** Full paper with question details for an active exam */
