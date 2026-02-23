@@ -1,45 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-// Mock active/recent exams — replace with real API call when exam scheduling service is ready
-const MOCK_EXAMS = [
-  {
-    id: 'exam-demo-001',
-    title: 'Programming Assessment — Mock Exam',
-    status: 'active',
-    startedAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    durationMinutes: 90,
-    candidateCount: 12,
-    activeCount: 10,
-    violationCount: 3,
-  },
-  {
-    id: 'exam-demo-002',
-    title: 'Data Structures Midterm',
-    status: 'active',
-    startedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    durationMinutes: 120,
-    candidateCount: 28,
-    activeCount: 27,
-    violationCount: 1,
-  },
-  {
-    id: 'exam-demo-003',
-    title: 'Algorithm Fundamentals Quiz',
-    status: 'closed',
-    startedAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    durationMinutes: 45,
-    candidateCount: 15,
-    activeCount: 0,
-    violationCount: 7,
-  },
-];
-
-function statusStyle(status) {
-  return status === 'active'
-    ? { dot: 'bg-green-500', badge: 'bg-green-100 text-green-700', label: 'Live' }
-    : { dot: 'bg-gray-400',  badge: 'bg-gray-100 text-gray-600',   label: 'Closed' };
-}
+import api from '../api/axios';
 
 function elapsed(isoStart) {
   const ms = Date.now() - new Date(isoStart).getTime();
@@ -50,7 +11,25 @@ function elapsed(isoStart) {
 
 export default function MonitorList() {
   const navigate = useNavigate();
+  const [schedules, setSchedules] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [customId, setCustomId] = useState('');
+
+  useEffect(() => {
+    api.get('/exam-schedules')
+      .then((r) => setSchedules(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const nowMs = Date.now();
+  const active = schedules.filter((s) => {
+    if (s.status === 'completed' || s.status === 'cancelled') return false;
+    const start = new Date(s.scheduledAt).getTime();
+    const end = start + s.durationMinutes * 60_000;
+    return nowMs >= start && nowMs < end;
+  });
+  const recent = schedules.filter((s) => s.status === 'completed' || s.status === 'cancelled');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,74 +47,72 @@ export default function MonitorList() {
       </nav>
 
       <main className="mx-auto max-w-4xl px-6 py-8 space-y-6">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Active Exams</h2>
-          <div className="space-y-3">
-            {MOCK_EXAMS.filter((e) => e.status === 'active').map((exam) => {
-              const s = statusStyle(exam.status);
-              return (
+
+        {loading && <p className="text-sm text-gray-400 text-center py-12">Loading exams…</p>}
+
+        {/* Active exams */}
+        {!loading && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Active Exams</h2>
+            <div className="space-y-3">
+              {active.length === 0 && (
+                <p className="text-sm text-gray-400">No active exams right now.</p>
+              )}
+              {active.map((exam) => (
                 <div
-                  key={exam.id}
+                  key={exam._id}
                   className="flex items-center gap-4 rounded-xl bg-white border border-gray-200 p-4 shadow-sm"
                 >
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.dot} animate-pulse`} />
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-green-500 animate-pulse" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="font-semibold text-gray-800 text-sm">{exam.title}</span>
-                      <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${s.badge}`}>{s.label}</span>
+                      <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-green-100 text-green-700">Live</span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-400">
-                      <span>{elapsed(exam.startedAt)}</span>
+                      <span>{elapsed(exam.scheduledAt)}</span>
                       <span>{exam.durationMinutes} min exam</span>
-                      <span className="text-green-600 font-medium">{exam.activeCount}/{exam.candidateCount} active</span>
-                      {exam.violationCount > 0 && (
-                        <span className="text-red-500 font-medium">{exam.violationCount} violation{exam.violationCount !== 1 ? 's' : ''}</span>
-                      )}
+                      <span>{exam.enrolledStudents?.length || 0} students enrolled</span>
                     </div>
                   </div>
                   <button
-                    onClick={() => navigate(`/monitor/${exam.id}`)}
+                    onClick={() => navigate(`/monitor/${exam._id}`)}
                     className="shrink-0 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 transition-colors"
                   >
                     Enter Monitor
                   </button>
                 </div>
-              );
-            })}
-
-            {MOCK_EXAMS.filter((e) => e.status === 'active').length === 0 && (
-              <p className="text-sm text-gray-400">No active exams right now.</p>
-            )}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recent / Closed</h2>
-          <div className="space-y-2">
-            {MOCK_EXAMS.filter((e) => e.status === 'closed').map((exam) => {
-              const s = statusStyle(exam.status);
-              return (
+        {/* Recent / closed exams */}
+        {!loading && recent.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recent / Closed</h2>
+            <div className="space-y-2">
+              {recent.map((exam) => (
                 <div
-                  key={exam.id}
+                  key={exam._id}
                   className="flex items-center gap-4 rounded-xl bg-white border border-gray-200 px-4 py-3 opacity-70"
                 >
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-gray-400" />
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-gray-700 font-medium">{exam.title}</span>
-                    <span className="ml-2 text-xs text-gray-400">{exam.violationCount} violations recorded</span>
+                    <span className="ml-2 text-xs text-gray-400 capitalize">{exam.status}</span>
                   </div>
-                  <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${s.badge}`}>{s.label}</span>
                   <button
-                    onClick={() => navigate(`/monitor/${exam.id}`)}
+                    onClick={() => navigate(`/exams/${exam._id}/results`)}
                     className="shrink-0 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1.5 transition-colors"
                   >
-                    Review
+                    Results
                   </button>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Manual exam ID entry */}
         <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">

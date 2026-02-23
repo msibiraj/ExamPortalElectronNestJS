@@ -33,11 +33,6 @@ export default function ExamsList() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  async function activate(id) {
-    await api.patch(`/exam-schedules/${id}/activate`);
-    setSchedules((p) => p.map((s) => s._id === id ? { ...s, status: 'active' } : s));
-  }
-
   async function cancel(id) {
     if (!window.confirm('Cancel this exam?')) return;
     await api.patch(`/exam-schedules/${id}/cancel`);
@@ -99,37 +94,43 @@ export default function ExamsList() {
                 <button onClick={() => navigate('/exam-schedules/new')} className="mt-4 text-sm text-indigo-600 hover:underline">Schedule your first exam →</button>
               </div>
             )}
-            {schedules.map((s) => (
+            {schedules.map((s) => {
+              const start = new Date(s.scheduledAt);
+              const endTime = new Date(start.getTime() + s.durationMinutes * 60_000);
+              const now = new Date();
+              const live = s.status !== 'completed' && s.status !== 'cancelled' && now >= start && now < endTime;
+              const displayStatus = live ? 'active' : s.status;
+              return (
               <div key={s._id} className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-4 shadow-sm">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-800">{s.title}</span>
-                    <StatusBadge status={s.status} />
+                    <StatusBadge status={displayStatus} />
                   </div>
                   <p className="text-xs text-gray-500">
                     {formatDate(s.scheduledAt)} · {s.durationMinutes} min · {s.enrolledStudents?.length || 0} students
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {s.status === 'scheduled' && (
-                    <>
-                      <button onClick={() => activate(s._id)} className="rounded-lg bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 text-xs font-semibold transition-colors">Activate</button>
-                      <button onClick={() => navigate(`/exam-schedules/${s._id}/edit`)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors">Edit</button>
-                      <button onClick={() => cancel(s._id)} className="text-xs text-red-500 hover:underline">Cancel</button>
-                    </>
-                  )}
-                  {s.status === 'active' && (
+                  {live && (
                     <>
                       <button onClick={() => navigate(`/monitor/${s._id}`)} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 text-xs font-semibold transition-colors">Monitor</button>
                       <button onClick={() => end(s._id)} className="text-xs text-red-500 hover:underline">End</button>
                     </>
                   )}
+                  {!live && s.status === 'scheduled' && (
+                    <>
+                      <button onClick={() => navigate(`/exam-schedules/${s._id}/edit`)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors">Edit</button>
+                      <button onClick={() => cancel(s._id)} className="text-xs text-red-500 hover:underline">Cancel</button>
+                    </>
+                  )}
                   {s.status === 'completed' && (
-                    <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors" onClick={() => navigate(`/exam-schedules/${s._id}/results`)}>Results</button>
+                    <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors" onClick={() => navigate(`/exams/${s._id}/results`)}>Results</button>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

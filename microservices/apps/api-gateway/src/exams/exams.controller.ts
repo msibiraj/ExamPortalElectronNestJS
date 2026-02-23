@@ -90,12 +90,6 @@ export class ExamSchedulesController {
     return this.examsService.updateSchedule(id, dto);
   }
 
-  @Patch(':id/activate')
-  @Roles(UserRole.ADMIN, UserRole.PROCTOR)
-  activate(@Param('id') id: string) {
-    return this.examsService.activateSchedule(id);
-  }
-
   @Patch(':id/complete')
   @Roles(UserRole.ADMIN, UserRole.PROCTOR)
   complete(@Param('id') id: string) {

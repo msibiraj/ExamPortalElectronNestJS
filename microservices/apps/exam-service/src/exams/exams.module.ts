@@ -5,6 +5,7 @@ import { ExamsService } from './exams.service';
 import { ExamPaper, ExamPaperSchema } from './schemas/exam-paper.schema';
 import { ExamSchedule, ExamScheduleSchema } from './schemas/exam-schedule.schema';
 import { StudentAttempt, StudentAttemptSchema } from './schemas/student-attempt.schema';
+import { Question, QuestionSchema } from '../../../question-service/src/questions/schemas/question.schema';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { StudentAttempt, StudentAttemptSchema } from './schemas/student-attempt.
       { name: ExamPaper.name,     schema: ExamPaperSchema     },
       { name: ExamSchedule.name,  schema: ExamScheduleSchema  },
       { name: StudentAttempt.name,schema: StudentAttemptSchema },
+      { name: Question.name,      schema: QuestionSchema       },
     ]),
   ],
   controllers: [ExamsController],

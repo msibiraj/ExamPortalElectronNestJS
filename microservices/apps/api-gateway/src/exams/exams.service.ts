@@ -24,7 +24,6 @@ export class ExamsService {
   findAllSchedules(userId: string)                 { return this.send(EXAM_PATTERNS.SCHEDULE_FIND_ALL, { userId }); }
   findOneSchedule(id: string)                      { return this.send(EXAM_PATTERNS.SCHEDULE_FIND_ONE, { id }); }
   updateSchedule(id: string, dto: any)             { return this.send(EXAM_PATTERNS.SCHEDULE_UPDATE,   { id, dto }); }
-  activateSchedule(id: string)                     { return this.send(EXAM_PATTERNS.SCHEDULE_ACTIVATE, { id }); }
   completeSchedule(id: string)                     { return this.send(EXAM_PATTERNS.SCHEDULE_COMPLETE, { id }); }
   cancelSchedule(id: string)                       { return this.send(EXAM_PATTERNS.SCHEDULE_CANCEL,   { id }); }
 

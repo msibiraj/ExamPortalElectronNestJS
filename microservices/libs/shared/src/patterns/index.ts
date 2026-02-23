@@ -39,7 +39,6 @@ export const EXAM_PATTERNS = {
   SCHEDULE_FIND_ALL: 'exam.schedule.find_all',
   SCHEDULE_FIND_ONE: 'exam.schedule.find_one',
   SCHEDULE_UPDATE: 'exam.schedule.update',
-  SCHEDULE_ACTIVATE: 'exam.schedule.activate',
   SCHEDULE_COMPLETE: 'exam.schedule.complete',
   SCHEDULE_CANCEL: 'exam.schedule.cancel',
   STUDENT_EXAMS: 'exam.student.exams',

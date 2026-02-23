@@ -19,6 +19,9 @@ class Answer {
   @Prop() code?: string;
 
   @Prop({ type: Object }) lastRunResult?: Record<string, any>;
+
+  // Grading
+  @Prop() score?: number;
 }
 const AnswerSchema = SchemaFactory.createForClass(Answer);
 
@@ -30,6 +33,8 @@ export class StudentAttempt {
   @Prop() startedAt?: Date;
   @Prop() submittedAt?: Date;
   @Prop({ type: [AnswerSchema], default: [] }) answers: Answer[];
+  @Prop() score?: number;
+  @Prop() maxScore?: number;
 
   createdAt: Date;
   updatedAt: Date;

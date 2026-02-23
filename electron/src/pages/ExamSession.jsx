@@ -1135,7 +1135,12 @@ export default function ExamSession() {
       socketRef.current?.emit('candidate.leave', { examId, candidateId: authUser?.id || authUser?._id });
       setSubmitted(true);
     } catch (err) {
-      alert(err.response?.data?.message || 'Submission failed. Please try again.');
+      const msg = err?.response?.data?.message || err?.message || '';
+      if (msg.toLowerCase().includes('submitted')) {
+        setSubmitted(true);
+      } else {
+        alert(msg || 'Submission failed. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }

@@ -61,11 +61,6 @@ export class ExamsController {
     return this.examsService.updateSchedule(p.id, p.dto);
   }
 
-  @MessagePattern(EXAM_PATTERNS.SCHEDULE_ACTIVATE)
-  activateSchedule(@Payload() p: { id: string }) {
-    return this.examsService.activateSchedule(p.id);
-  }
-
   @MessagePattern(EXAM_PATTERNS.SCHEDULE_COMPLETE)
   completeSchedule(@Payload() p: { id: string }) {
     return this.examsService.completeSchedule(p.id);

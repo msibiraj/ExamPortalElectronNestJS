@@ -6,13 +6,15 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { ExamPaper, ExamPaperDocument } from './schemas/exam-paper.schema';
 import { ExamSchedule, ExamScheduleDocument } from './schemas/exam-schedule.schema';
 import { StudentAttempt, StudentAttemptDocument } from './schemas/student-attempt.schema';
+import { Question, QuestionDocument } from '../../../question-service/src/questions/schemas/question.schema';
 
 @Injectable()
 export class ExamsService {
   constructor(
-    @InjectModel(ExamPaper.name)    private paperModel:   Model<ExamPaperDocument>,
-    @InjectModel(ExamSchedule.name) private scheduleModel: Model<ExamScheduleDocument>,
+    @InjectModel(ExamPaper.name)    private paperModel:    Model<ExamPaperDocument>,
+    @InjectModel(ExamSchedule.name) private scheduleModel:  Model<ExamScheduleDocument>,
     @InjectModel(StudentAttempt.name) private attemptModel: Model<StudentAttemptDocument>,
+    @InjectModel(Question.name)     private questionModel: Model<QuestionDocument>,
   ) {}
 
   // ── PAPER ──────────────────────────────────────────────────────────────────
@@ -110,10 +112,6 @@ export class ExamsService {
     return schedule.toObject();
   }
 
-  async activateSchedule(id: string) {
-    return this.scheduleModel.findByIdAndUpdate(id, { status: 'active' }, { new: true }).lean();
-  }
-
   async completeSchedule(id: string) {
     return this.scheduleModel.findByIdAndUpdate(id, { status: 'completed' }, { new: true }).lean();
   }
@@ -132,22 +130,36 @@ export class ExamsService {
       status: { $in: ['scheduled', 'active', 'completed'] },
     }).sort({ scheduledAt: 1 }).lean();
 
+    // Fetch this student's attempts in one query
+    const scheduleIds = schedules.map((s) => s._id);
+    const attempts = await this.attemptModel.find({
+      examScheduleId: { $in: scheduleIds },
+      studentId: new Types.ObjectId(studentId),
+    }).lean() as Array<{ examScheduleId: Types.ObjectId; status: string }>;
+    const attemptMap = new Map(attempts.map((a) => [a.examScheduleId.toString(), a]));
+
     return schedules.map((s) => {
       const startTime = new Date(s.scheduledAt);
       const endTime = new Date(startTime.getTime() + s.durationMinutes * 60_000);
       const windowExpired = now >= endTime;
+      const attempt = attemptMap.get(s._id.toString());
+
+      // If student already submitted/timed-out, never show as live
+      const studentDone = attempt && ['submitted', 'timed-out'].includes(attempt.status);
 
       const isLive =
-        s.status === 'active' ||
-        (s.status === 'scheduled' && startTime <= now && !windowExpired);
+        !studentDone && (
+          s.status === 'active' ||
+          (s.status === 'scheduled' && startTime <= now && !windowExpired)
+        );
 
-      // Treat a 'scheduled' exam whose window has closed as 'completed'
+      // Treat completed/expired/student-done as 'completed'
       const displayStatus =
-        s.status === 'completed' || (s.status === 'scheduled' && windowExpired)
+        studentDone || s.status === 'completed' || (s.status === 'scheduled' && windowExpired)
           ? 'completed'
           : s.status;
 
-      return { ...s, isLive, status: displayStatus };
+      return { ...s, isLive, status: displayStatus, attemptStatus: attempt?.status };
     });
   }
 
@@ -174,7 +186,11 @@ export class ExamsService {
       examScheduleId: new Types.ObjectId(scheduleId),
       studentId: new Types.ObjectId(studentId),
     }).lean();
-    if (existing) return existing; // resume
+    if (existing) {
+      if (existing.status !== 'in-progress')
+        throw new RpcException(new BadRequestException('Attempt already submitted'));
+      return existing; // resume in-progress attempt
+    }
 
     const attempt = await this.attemptModel.create({
       examScheduleId: new Types.ObjectId(scheduleId),
@@ -224,7 +240,56 @@ export class ExamsService {
         else attempt.answers.push({ ...answer, questionId: qid });
       }
     }
-    attempt.status = 'submitted';
+
+    // ── Auto-grade MCQ answers ───────────────────────────────────────────────
+    const schedule = await this.scheduleModel.findById(scheduleId).lean();
+    const paper = schedule ? await this.paperModel.findById(schedule.paperId).lean() : null;
+
+    // marks per question as defined in the paper
+    const marksMap = new Map<string, number>();
+    for (const section of (paper?.sections ?? [])) {
+      for (const q of (section.questions ?? [])) {
+        marksMap.set(q.questionId.toString(), q.marks ?? 0);
+      }
+    }
+
+    // fetch question docs only for MCQ answers
+    const mcqIds = attempt.answers
+      .filter((a) => a.type === 'mcq-single' || a.type === 'mcq-multiple')
+      .map((a) => a.questionId);
+
+    const questions = await this.questionModel.find({ _id: { $in: mcqIds } }).lean();
+    const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
+
+    let totalScore = 0;
+    let maxScore   = 0;
+
+    for (const answer of attempt.answers) {
+      const qid   = answer.questionId.toString();
+      const marks  = marksMap.get(qid) ?? 0;
+      maxScore    += marks;
+
+      if (answer.type === 'mcq-single' || answer.type === 'mcq-multiple') {
+        const question: any = questionMap.get(qid);
+        if (question && marks > 0) {
+          const correctTexts = new Set<string>(
+            (question.options as any[]).filter((o) => o.isCorrect).map((o) => o.text),
+          );
+          const selectedSet = new Set<string>(answer.selectedOptions ?? []);
+          const allCorrect  = [...correctTexts].every((t) => selectedSet.has(t));
+          const noWrong     = [...selectedSet].every((t) => correctTexts.has(t));
+          const awarded     = allCorrect && noWrong ? marks : 0;
+          (answer as any).score = awarded;
+          totalScore += awarded;
+        }
+      }
+    }
+
+    attempt.score    = totalScore;
+    attempt.maxScore = maxScore;
+    // ────────────────────────────────────────────────────────────────────────
+
+    attempt.status      = 'submitted';
     attempt.submittedAt = new Date();
     attempt.markModified('answers');
     await attempt.save();

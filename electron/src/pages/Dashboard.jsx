@@ -34,16 +34,14 @@ const PROCTOR_NAV = [
     color: 'green',
     icon: '👁️',
     action: 'Open Monitor',
-    comingSoon: true,
   },
   {
     label: 'Results',
-    description: 'Grade descriptive answers, review item analysis, and publish results.',
-    path: '/results',
+    description: 'View exam submissions and results.',
+    path: '/exams',
     color: 'amber',
     icon: '📊',
     action: 'View Results',
-    comingSoon: true,
   },
 ];
 
