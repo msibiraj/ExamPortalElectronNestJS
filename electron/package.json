@@ -8,7 +8,30 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --disable-gpu-vsync 2>/dev/null\"",
     "build": "vite build && electron-builder",
+    "build:linux": "vite build && electron-builder --linux",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.sibirajmunirathinam.examportal",
+    "productName": "ExamPortal",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**",
+      "!release/**",
+      "!src/**",
+      "!*.config.*",
+      "!*.md"
+    ],
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Education"
+    }
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

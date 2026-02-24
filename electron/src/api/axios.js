@@ -51,7 +51,7 @@ api.interceptors.response.use(
       if (!refreshToken) {
         isRefreshing = false;
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.hash = '#/login';
         return Promise.reject(error);
       }
 
@@ -67,7 +67,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.hash = '#/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
