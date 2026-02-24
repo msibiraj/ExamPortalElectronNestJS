@@ -23,6 +23,7 @@ export class ExamSchedule {
   settings: { lateJoinWindowMinutes: number; autoSubmit: boolean };
 
   @Prop({ type: Types.ObjectId, required: true }) createdBy: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, required: true, index: true }) organizationId: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
@@ -30,4 +31,4 @@ export class ExamSchedule {
 
 export const ExamScheduleSchema = SchemaFactory.createForClass(ExamSchedule);
 ExamScheduleSchema.index({ status: 1, scheduledAt: 1 });
-ExamScheduleSchema.index({ enrolledStudents: 1, status: 1 });
+ExamScheduleSchema.index({ enrolledStudents: 1, organizationId: 1, status: 1 });

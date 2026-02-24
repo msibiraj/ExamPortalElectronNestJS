@@ -5,6 +5,7 @@ import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 import { UserRole } from '@app/shared';
 import { AuthService } from './auth.service';
+import { CurrentUser } from '../decorators/current-user.decorator';
 
 @ApiTags('Admin — Users')
 @ApiBearerAuth()
@@ -15,9 +16,9 @@ export class AdminUsersController {
   constructor(private readonly authService: AuthService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all users (admin only)' })
-  listUsers() {
-    return this.authService.listUsers();
+  @ApiOperation({ summary: 'List all users in this organization (admin only)' })
+  listUsers(@CurrentUser() user: any) {
+    return this.authService.listUsers(user.organizationId);
   }
 
   @Patch(':id')

@@ -23,11 +23,12 @@ export class QuestionsService {
 
   // ── CREATE ─────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateQuestionDto & { userId: string }) {
-    const { userId, ...questionData } = dto;
+  async create(dto: CreateQuestionDto & { userId: string; organizationId: string }) {
+    const { userId, organizationId, ...questionData } = dto;
     const question = await this.questionModel.create({
       ...questionData,
       createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
       status: 'draft',
       currentVersion: 1,
     });
@@ -37,28 +38,27 @@ export class QuestionsService {
 
   // ── READ ───────────────────────────────────────────────────────────────────
 
-  async findAll(filter: QuestionFilterDto) {
-    const query: Record<string, any> = {};
+  async findAll(filter: QuestionFilterDto & { userId: string; organizationId: string }) {
+    const { userId, organizationId, ...rest } = filter as any;
+    const query: Record<string, any> = {
+      createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
+    };
 
-    if (filter.search) {
+    if (rest.search) {
       query.$or = [
-        { body: { $regex: filter.search, $options: 'i' } },
-        { tags: { $regex: filter.search, $options: 'i' } },
+        { body: { $regex: rest.search, $options: 'i' } },
+        { tags: { $regex: rest.search, $options: 'i' } },
       ];
     }
-    if (filter.types?.length) query.type = { $in: filter.types };
-    if (filter.difficulties?.length) query.difficulty = { $in: filter.difficulties };
-    if (filter.topic) query.topic = { $regex: filter.topic, $options: 'i' };
-    if (filter.tags?.length) query.tags = { $all: filter.tags };
-    if (filter.status) query.status = filter.status;
-    if (filter.flaggedForReview !== undefined) query.flaggedForReview = filter.flaggedForReview;
+    if (rest.types?.length) query.type = { $in: rest.types };
+    if (rest.difficulties?.length) query.difficulty = { $in: rest.difficulties };
+    if (rest.topic) query.topic = { $regex: rest.topic, $options: 'i' };
+    if (rest.tags?.length) query.tags = { $all: rest.tags };
+    if (rest.status) query.status = rest.status;
+    if (rest.flaggedForReview !== undefined) query.flaggedForReview = rest.flaggedForReview;
 
-    const questions = await this.questionModel
-      .find(query)
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return questions;
+    return this.questionModel.find(query).sort({ createdAt: -1 }).lean();
   }
 
   async findOne(id: string) {
@@ -132,6 +132,7 @@ export class QuestionsService {
       status: 'draft',
       currentVersion: 1,
       createdBy: new Types.ObjectId(userId),
+      // organizationId is copied from source (same org)
       body: `[Copy] ${rest.body}`,
     });
     await this.saveVersion(copy, userId, 'draft');
@@ -151,9 +152,12 @@ export class QuestionsService {
 
   // ── EXPORT CSV ─────────────────────────────────────────────────────────────
 
-  async exportCsv(userId: string) {
+  async exportCsv(userId: string, organizationId: string) {
     const questions = await this.questionModel
-      .find({ createdBy: new Types.ObjectId(userId) })
+      .find({
+        createdBy: new Types.ObjectId(userId),
+        organizationId: new Types.ObjectId(organizationId),
+      })
       .lean();
 
     const header = 'id,type,topic,difficulty,marks,status,tags,body\n';
@@ -177,8 +181,8 @@ export class QuestionsService {
 
   // ── IMPORT ─────────────────────────────────────────────────────────────────
 
-  async importQuestions(dto: ImportQuestionsDto & { userId: string }) {
-    const { userId, format, content, importStatus = 'draft', topicMapping = {} } = dto;
+  async importQuestions(dto: ImportQuestionsDto & { userId: string; organizationId: string }) {
+    const { userId, organizationId, format, content, importStatus = 'draft', topicMapping = {} } = dto;
     const imported: any[] = [];
     const skipped: { index: number; reason: string }[] = [];
 
@@ -199,6 +203,7 @@ export class QuestionsService {
           status: importStatus,
           currentVersion: 1,
           createdBy: new Types.ObjectId(userId),
+          organizationId: new Types.ObjectId(organizationId),
         });
         await this.saveVersion(question, userId, importStatus);
         imported.push(question._id);
@@ -213,11 +218,10 @@ export class QuestionsService {
   // ── VERSION HISTORY ────────────────────────────────────────────────────────
 
   async getHistory(questionId: string) {
-    const versions = await this.versionModel
+    return this.versionModel
       .find({ questionId: new Types.ObjectId(questionId) })
       .sort({ version: -1 })
       .lean();
-    return versions;
   }
 
   async restoreVersion(questionId: string, dto: RestoreVersionDto & { userId: string }) {

@@ -11,6 +11,8 @@ export class UsersService {
     email: string;
     password: string;
     name: string;
+    organizationId: string;
+    role?: string;
   }): Promise<UserDocument> {
     return this.userModel.create(data);
   }
@@ -23,8 +25,12 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
-  async findAll(): Promise<UserDocument[]> {
-    return this.userModel.find().select('-password').sort({ createdAt: -1 }).exec();
+  async findAll(organizationId: string): Promise<UserDocument[]> {
+    return this.userModel
+      .find({ organizationId })
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
   async updateUser(id: string, data: { name?: string; role?: string }): Promise<UserDocument | null> {

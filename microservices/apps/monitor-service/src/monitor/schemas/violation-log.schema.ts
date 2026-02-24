@@ -11,6 +11,9 @@ export class ViolationLog {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   candidateId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  organizationId: Types.ObjectId;
+
   @Prop({ required: true })
   candidateName: string;
 

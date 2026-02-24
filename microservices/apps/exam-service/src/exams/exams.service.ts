@@ -19,20 +19,23 @@ export class ExamsService {
 
   // ── PAPER ──────────────────────────────────────────────────────────────────
 
-  async createPaper(dto: any, userId: string) {
+  async createPaper(dto: any, userId: string, organizationId: string) {
     const totalMarks = this.calcTotalMarks(dto.sections || []);
     const paper = await this.paperModel.create({
       ...dto,
       totalMarks,
       createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
       status: 'draft',
     });
     return paper.toObject();
   }
 
-  async findAllPapers(userId: string) {
-    return this.paperModel.find({ createdBy: new Types.ObjectId(userId) })
-      .sort({ createdAt: -1 }).lean();
+  async findAllPapers(userId: string, organizationId: string) {
+    return this.paperModel.find({
+      createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
+    }).sort({ createdAt: -1 }).lean();
   }
 
   async findOnePaper(id: string) {
@@ -71,7 +74,7 @@ export class ExamsService {
 
   // ── SCHEDULE ───────────────────────────────────────────────────────────────
 
-  async createSchedule(dto: any, userId: string) {
+  async createSchedule(dto: any, userId: string, organizationId: string) {
     const paper = await this.paperModel.findById(dto.paperId);
     if (!paper) throw new RpcException(new NotFoundException('Exam paper not found'));
     if (paper.status !== 'published')
@@ -82,14 +85,17 @@ export class ExamsService {
       paperId: new Types.ObjectId(dto.paperId),
       enrolledStudents: (dto.enrolledStudents || []).map((id: string) => new Types.ObjectId(id)),
       createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
       status: 'scheduled',
     });
     return schedule.toObject();
   }
 
-  async findAllSchedules(userId: string) {
-    return this.scheduleModel.find({ createdBy: new Types.ObjectId(userId) })
-      .sort({ scheduledAt: -1 }).lean();
+  async findAllSchedules(userId: string, organizationId: string) {
+    return this.scheduleModel.find({
+      createdBy: new Types.ObjectId(userId),
+      organizationId: new Types.ObjectId(organizationId),
+    }).sort({ scheduledAt: -1 }).lean();
   }
 
   async findOneSchedule(id: string) {
@@ -123,14 +129,14 @@ export class ExamsService {
   // ── STUDENT ────────────────────────────────────────────────────────────────
 
   /** Exams a student is enrolled in */
-  async getStudentExams(studentId: string): Promise<any[]> {
+  async getStudentExams(studentId: string, organizationId: string): Promise<any[]> {
     const now = new Date();
     const schedules = await this.scheduleModel.find({
       enrolledStudents: new Types.ObjectId(studentId),
+      organizationId: new Types.ObjectId(organizationId),
       status: { $in: ['scheduled', 'active', 'completed'] },
     }).sort({ scheduledAt: 1 }).lean();
 
-    // Fetch this student's attempts in one query
     const scheduleIds = schedules.map((s) => s._id);
     const attempts = await this.attemptModel.find({
       examScheduleId: { $in: scheduleIds },
@@ -144,7 +150,6 @@ export class ExamsService {
       const windowExpired = now >= endTime;
       const attempt = attemptMap.get(s._id.toString());
 
-      // If student already submitted/timed-out, never show as live
       const studentDone = attempt && ['submitted', 'timed-out'].includes(attempt.status);
 
       const isLive =
@@ -153,7 +158,6 @@ export class ExamsService {
           (s.status === 'scheduled' && startTime <= now && !windowExpired)
         );
 
-      // Treat completed/expired/student-done as 'completed'
       const displayStatus =
         studentDone || s.status === 'completed' || (s.status === 'scheduled' && windowExpired)
           ? 'completed'
@@ -181,7 +185,7 @@ export class ExamsService {
 
   // ── ATTEMPT ────────────────────────────────────────────────────────────────
 
-  async startAttempt(scheduleId: string, studentId: string) {
+  async startAttempt(scheduleId: string, studentId: string, organizationId: string) {
     const existing = await this.attemptModel.findOne({
       examScheduleId: new Types.ObjectId(scheduleId),
       studentId: new Types.ObjectId(studentId),
@@ -189,12 +193,13 @@ export class ExamsService {
     if (existing) {
       if (existing.status !== 'in-progress')
         throw new RpcException(new BadRequestException('Attempt already submitted'));
-      return existing; // resume in-progress attempt
+      return existing;
     }
 
     const attempt = await this.attemptModel.create({
       examScheduleId: new Types.ObjectId(scheduleId),
       studentId: new Types.ObjectId(studentId),
+      organizationId: new Types.ObjectId(organizationId),
       startedAt: new Date(),
       status: 'in-progress',
       answers: [],
@@ -231,7 +236,6 @@ export class ExamsService {
     if (attempt.status !== 'in-progress')
       throw new RpcException(new BadRequestException('Attempt already submitted'));
 
-    // Merge any last-minute answers
     if (finalAnswers?.length) {
       for (const answer of finalAnswers) {
         const qid = new Types.ObjectId(answer.questionId);
@@ -241,11 +245,9 @@ export class ExamsService {
       }
     }
 
-    // ── Auto-grade MCQ answers ───────────────────────────────────────────────
     const schedule = await this.scheduleModel.findById(scheduleId).lean();
     const paper = schedule ? await this.paperModel.findById(schedule.paperId).lean() : null;
 
-    // marks per question as defined in the paper
     const marksMap = new Map<string, number>();
     for (const section of (paper?.sections ?? [])) {
       for (const q of (section.questions ?? [])) {
@@ -253,7 +255,6 @@ export class ExamsService {
       }
     }
 
-    // fetch question docs only for MCQ answers
     const mcqIds = attempt.answers
       .filter((a) => a.type === 'mcq-single' || a.type === 'mcq-multiple')
       .map((a) => a.questionId);
@@ -287,7 +288,6 @@ export class ExamsService {
 
     attempt.score    = totalScore;
     attempt.maxScore = maxScore;
-    // ────────────────────────────────────────────────────────────────────────
 
     attempt.status      = 'submitted';
     attempt.submittedAt = new Date();

@@ -65,6 +65,9 @@ export class Question {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  organizationId: Types.ObjectId;
+
   // MCQ fields
   @Prop({ type: [{ text: String, isCorrect: Boolean }], default: [] })
   options: McqOption[];
@@ -106,6 +109,6 @@ export class Question {
 }
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
-QuestionSchema.index({ topic: 1, status: 1 });
+QuestionSchema.index({ createdBy: 1, organizationId: 1, status: 1 });
 QuestionSchema.index({ tags: 1 });
 QuestionSchema.index({ type: 1, difficulty: 1, status: 1 });

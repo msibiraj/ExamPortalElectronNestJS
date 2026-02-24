@@ -23,13 +23,13 @@ export class ExamPapersController {
   @Roles(UserRole.ADMIN, UserRole.PROCTOR)
   @ApiOperation({ summary: 'Create exam paper (draft)' })
   create(@Body() dto: any, @CurrentUser() user: any) {
-    return this.examsService.createPaper(dto, user.id);
+    return this.examsService.createPaper(dto, user.id, user.organizationId);
   }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.PROCTOR)
   findAll(@CurrentUser() user: any) {
-    return this.examsService.findAllPapers(user.id);
+    return this.examsService.findAllPapers(user.id, user.organizationId);
   }
 
   @Get(':id')
@@ -69,13 +69,13 @@ export class ExamSchedulesController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.PROCTOR)
   create(@Body() dto: any, @CurrentUser() user: any) {
-    return this.examsService.createSchedule(dto, user.id);
+    return this.examsService.createSchedule(dto, user.id, user.organizationId);
   }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.PROCTOR)
   findAll(@CurrentUser() user: any) {
-    return this.examsService.findAllSchedules(user.id);
+    return this.examsService.findAllSchedules(user.id, user.organizationId);
   }
 
   @Get(':id')
@@ -122,7 +122,7 @@ export class StudentExamsController {
   @Roles(UserRole.STUDENT)
   @ApiOperation({ summary: 'Get exams assigned to the logged-in student' })
   getMyExams(@CurrentUser() user: any) {
-    return this.examsService.getStudentExams(user.id);
+    return this.examsService.getStudentExams(user.id, user.organizationId);
   }
 
   @Get(':id/paper')
@@ -135,7 +135,7 @@ export class StudentExamsController {
   @Post(':id/start')
   @Roles(UserRole.STUDENT)
   start(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.examsService.startAttempt(id, user.id);
+    return this.examsService.startAttempt(id, user.id, user.organizationId);
   }
 
   @Post(':id/answer')

@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AUTH_PATTERNS,
+  ORG_PATTERNS,
   SignupDto,
   LoginDto,
   RefreshTokenDto,
@@ -43,8 +44,8 @@ export class AuthController {
   }
 
   @MessagePattern(AUTH_PATTERNS.LIST_USERS)
-  listUsers() {
-    return this.authService.listUsers();
+  listUsers(@Payload() data: { organizationId: string }) {
+    return this.authService.listUsers(data.organizationId);
   }
 
   @MessagePattern(AUTH_PATTERNS.UPDATE_USER)
@@ -55,5 +56,20 @@ export class AuthController {
   @MessagePattern(AUTH_PATTERNS.DELETE_USER)
   deleteUser(@Payload() data: { userId: string }) {
     return this.authService.deleteUser(data.userId);
+  }
+
+  @MessagePattern(ORG_PATTERNS.CREATE)
+  createOrganization(@Payload() data: { name: string; code: string }) {
+    return this.authService.createOrganization(data.name, data.code);
+  }
+
+  @MessagePattern(ORG_PATTERNS.FIND_BY_CODE)
+  findOrganizationByCode(@Payload() data: { code: string }) {
+    return this.authService.findOrganizationByCode(data.code);
+  }
+
+  @MessagePattern(ORG_PATTERNS.LIST)
+  listOrganizations() {
+    return this.authService.listOrganizations();
   }
 }

@@ -1,3 +1,9 @@
+export const ORG_PATTERNS = {
+  CREATE: 'org.create',
+  FIND_BY_CODE: 'org.find_by_code',
+  LIST: 'org.list',
+};
+
 export const AUTH_PATTERNS = {
   SIGNUP: 'auth.signup',
   LOGIN: 'auth.login',

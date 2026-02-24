@@ -18,15 +18,15 @@ export class QuestionsService {
     @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
   ) {}
 
-  create(dto: CreateQuestionDto, userId: string) {
+  create(dto: CreateQuestionDto, userId: string, organizationId: string) {
     return firstValueFrom(
-      this.questionClient.send(QUESTION_PATTERNS.CREATE, { ...dto, userId }),
+      this.questionClient.send(QUESTION_PATTERNS.CREATE, { ...dto, userId, organizationId }),
     );
   }
 
-  findAll(filter: QuestionFilterDto, userId: string) {
+  findAll(filter: QuestionFilterDto, userId: string, organizationId: string) {
     return firstValueFrom(
-      this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, { filter, userId }),
+      this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, { filter, userId, organizationId }),
     );
   }
 
@@ -72,15 +72,15 @@ export class QuestionsService {
     );
   }
 
-  exportCsv(userId: string) {
+  exportCsv(userId: string, organizationId: string) {
     return firstValueFrom(
-      this.questionClient.send(QUESTION_PATTERNS.EXPORT_CSV, { userId }),
+      this.questionClient.send(QUESTION_PATTERNS.EXPORT_CSV, { userId, organizationId }),
     );
   }
 
-  importQuestions(dto: ImportQuestionsDto, userId: string) {
+  importQuestions(dto: ImportQuestionsDto, userId: string, organizationId: string) {
     return firstValueFrom(
-      this.questionClient.send(QUESTION_PATTERNS.IMPORT, { ...dto, userId }),
+      this.questionClient.send(QUESTION_PATTERNS.IMPORT, { ...dto, userId, organizationId }),
     );
   }
 

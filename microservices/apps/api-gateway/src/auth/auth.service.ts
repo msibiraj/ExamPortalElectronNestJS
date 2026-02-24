@@ -51,8 +51,8 @@ export class AuthService {
     );
   }
 
-  async listUsers() {
-    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.LIST_USERS, {}));
+  async listUsers(organizationId: string) {
+    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.LIST_USERS, { organizationId }));
   }
 
   async updateUser(userId: string, data: { name?: string; role?: string }) {

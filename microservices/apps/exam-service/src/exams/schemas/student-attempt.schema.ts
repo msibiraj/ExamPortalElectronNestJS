@@ -29,6 +29,7 @@ const AnswerSchema = SchemaFactory.createForClass(Answer);
 export class StudentAttempt {
   @Prop({ type: Types.ObjectId, required: true }) examScheduleId: Types.ObjectId;
   @Prop({ type: Types.ObjectId, required: true }) studentId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, required: true, index: true }) organizationId: Types.ObjectId;
   @Prop({ enum: ['in-progress', 'submitted', 'timed-out'], default: 'in-progress' }) status: string;
   @Prop() startedAt?: Date;
   @Prop() submittedAt?: Date;

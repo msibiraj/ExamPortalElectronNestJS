@@ -20,11 +20,12 @@ export class MonitorService {
     candidateId: string;
     candidateName: string;
     candidateEmail: string;
+    organizationId?: string;
     totalQuestions?: number;
     hasAccommodation?: boolean;
     socketId?: string;
   }) {
-    const { examId, candidateId, ...rest } = data;
+    const { examId, candidateId, organizationId, ...rest } = data;
     return this.sessionModel
       .findOneAndUpdate(
         {
@@ -36,6 +37,7 @@ export class MonitorService {
           $setOnInsert: {
             examId: new Types.ObjectId(examId),
             candidateId: new Types.ObjectId(candidateId),
+            ...(organizationId ? { organizationId: new Types.ObjectId(organizationId) } : {}),
             violationCount: 0,
             highestSeverity: 'none',
           },
@@ -84,20 +86,20 @@ export class MonitorService {
     examId: string;
     candidateId: string;
     candidateName: string;
+    organizationId?: string;
     type: string;
     severity: 'low' | 'medium' | 'high';
     description?: string;
     frameSnapshot?: string;
   }) {
-    const { examId, candidateId, ...rest } = data;
+    const { examId, candidateId, organizationId, ...rest } = data;
 
     const violation = await this.violationModel.create({
       examId: new Types.ObjectId(examId),
       candidateId: new Types.ObjectId(candidateId),
+      ...(organizationId ? { organizationId: new Types.ObjectId(organizationId) } : {}),
       ...rest,
     });
-
-    const SEVERITY_ORDER = { none: 0, low: 1, medium: 2, high: 3 };
 
     await this.sessionModel.findOneAndUpdate(
       {
@@ -106,11 +108,9 @@ export class MonitorService {
       },
       {
         $inc: { violationCount: 1 },
-        $max: {}, // handled below
       },
     );
 
-    // Update highestSeverity if this violation is higher
     await this.sessionModel.findOneAndUpdate(
       {
         examId: new Types.ObjectId(examId),
@@ -169,11 +169,12 @@ export class MonitorService {
       .lean();
   }
 
-  async logWarning(examId: string, candidateId: string, candidateName: string) {
+  async logWarning(examId: string, candidateId: string, candidateName: string, organizationId?: string) {
     return this.logViolation({
       examId,
       candidateId,
       candidateName,
+      organizationId,
       type: 'proctor-warning',
       severity: 'medium',
       description: 'Formal warning issued by proctor',

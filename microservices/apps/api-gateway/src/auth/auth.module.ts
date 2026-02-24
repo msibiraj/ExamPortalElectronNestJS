@@ -5,11 +5,14 @@ import { AUTH_SERVICE } from '@app/shared';
 import { AuthController } from './auth.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AuthService } from './auth.service';
+import { OrganizationsController } from './organizations.controller';
+import { OrganizationsService } from './organizations.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 
 @Module({
   imports: [
+    ConfigModule,
     ClientsModule.registerAsync([
       {
         name: AUTH_SERVICE,
@@ -27,8 +30,8 @@ import { RolesGuard } from '../guards/roles.guard';
       },
     ]),
   ],
-  controllers: [AuthController, AdminUsersController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
+  controllers: [AuthController, AdminUsersController, OrganizationsController],
+  providers: [AuthService, OrganizationsService, JwtAuthGuard, RolesGuard],
   exports: [AuthService, JwtAuthGuard, ClientsModule],
 })
 export class AuthModule {}

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 import { UserRole } from '@app/shared';
 
 export type UserDocument = HydratedDocument<User>;
@@ -17,6 +17,9 @@ export class User {
 
   @Prop({ required: true, enum: Object.values(UserRole), default: UserRole.PROCTOR })
   role: UserRole;
+
+  @Prop({ required: true, type: Types.ObjectId, ref: 'Organization', index: true })
+  organizationId: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;

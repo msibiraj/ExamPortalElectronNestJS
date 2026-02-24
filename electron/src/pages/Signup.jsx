@@ -6,7 +6,7 @@ import logo from '../assets/logo.png';
 export default function Signup() {
   const { user, signup } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'proctor' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'proctor', organizationCode: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -20,7 +20,7 @@ export default function Signup() {
     setError('');
     setSubmitting(true);
     try {
-      const data = await signup(form.name, form.email, form.password, form.role);
+      const data = await signup(form.name, form.email, form.password, form.role, form.organizationCode);
       const role = data?.user?.role;
       navigate(role === 'student' ? '/student' : '/dashboard');
     } catch (err) {
@@ -97,6 +97,21 @@ export default function Signup() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 placeholder="Min. 8 characters"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="organizationCode" className="block text-sm font-medium text-gray-700">
+                Organization Code
+              </label>
+              <input
+                id="organizationCode"
+                type="text"
+                required
+                value={form.organizationCode}
+                onChange={(e) => setForm({ ...form, organizationCode: e.target.value.toUpperCase() })}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none uppercase"
+                placeholder="e.g. SCHOOL1"
               />
             </div>
 

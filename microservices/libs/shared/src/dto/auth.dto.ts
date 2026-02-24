@@ -15,6 +15,9 @@ export class SignupDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsString()
+  organizationCode: string;
 }
 
 export class LoginDto {

@@ -11,6 +11,9 @@ export class CandidateSession {
   @Prop({ type: Types.ObjectId, required: true })
   candidateId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, index: true })
+  organizationId?: Types.ObjectId;
+
   @Prop({ required: true })
   candidateName: string;
 

@@ -53,7 +53,7 @@ export class MonitorController {
   }
 
   @MessagePattern(MONITOR_PATTERNS.LOG_WARNING)
-  logWarning(@Payload() payload: { examId: string; candidateId: string; candidateName: string }) {
-    return this.monitorService.logWarning(payload.examId, payload.candidateId, payload.candidateName);
+  logWarning(@Payload() payload: { examId: string; candidateId: string; candidateName: string; organizationId: string }) {
+    return this.monitorService.logWarning(payload.examId, payload.candidateId, payload.candidateName, payload.organizationId);
   }
 }

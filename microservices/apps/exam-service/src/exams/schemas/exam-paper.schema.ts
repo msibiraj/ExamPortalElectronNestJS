@@ -48,10 +48,11 @@ export class ExamPaper {
 
   @Prop({ enum: ['draft', 'published'], default: 'draft' }) status: string;
   @Prop({ type: Types.ObjectId, required: true }) createdBy: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, required: true, index: true }) organizationId: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
 }
 
 export const ExamPaperSchema = SchemaFactory.createForClass(ExamPaper);
-ExamPaperSchema.index({ createdBy: 1, status: 1 });
+ExamPaperSchema.index({ createdBy: 1, organizationId: 1, status: 1 });

@@ -44,19 +44,19 @@ export class QuestionsController {
   @Post()
   @ApiOperation({ summary: 'Create a new question (saves as draft)' })
   create(@Body() dto: CreateQuestionDto, @CurrentUser() user: any) {
-    return this.questionsService.create(dto, user.id);
+    return this.questionsService.create(dto, user.id, user.organizationId);
   }
 
   @Get()
   @ApiOperation({ summary: 'List all questions with optional filters' })
   findAll(@Query() filter: QuestionFilterDto, @CurrentUser() user: any) {
-    return this.questionsService.findAll(filter, user.id);
+    return this.questionsService.findAll(filter, user.id, user.organizationId);
   }
 
   @Get('export/csv')
   @ApiOperation({ summary: 'Export question list as CSV' })
   async exportCsv(@CurrentUser() user: any, @Res() res: Response) {
-    const result = await this.questionsService.exportCsv(user.id);
+    const result = await this.questionsService.exportCsv(user.id, user.organizationId);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=questions.csv');
     res.send(result.csv);
@@ -112,7 +112,7 @@ export class QuestionsController {
   @Post('import')
   @ApiOperation({ summary: 'Import questions from CSV/Moodle XML/QTI file content' })
   importQuestions(@Body() dto: ImportQuestionsDto, @CurrentUser() user: any) {
-    return this.questionsService.importQuestions(dto, user.id);
+    return this.questionsService.importQuestions(dto, user.id, user.organizationId);
   }
 
   @Get(':id/history')

@@ -10,13 +10,13 @@ export class ExamsController {
   // ── PAPER ──────────────────────────────────────────────────────────────────
 
   @MessagePattern(EXAM_PATTERNS.PAPER_CREATE)
-  createPaper(@Payload() p: { dto: any; userId: string }) {
-    return this.examsService.createPaper(p.dto, p.userId);
+  createPaper(@Payload() p: { dto: any; userId: string; organizationId: string }) {
+    return this.examsService.createPaper(p.dto, p.userId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.PAPER_FIND_ALL)
-  findAllPapers(@Payload() p: { userId: string }) {
-    return this.examsService.findAllPapers(p.userId);
+  findAllPapers(@Payload() p: { userId: string; organizationId: string }) {
+    return this.examsService.findAllPapers(p.userId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.PAPER_FIND_ONE)
@@ -42,13 +42,13 @@ export class ExamsController {
   // ── SCHEDULE ───────────────────────────────────────────────────────────────
 
   @MessagePattern(EXAM_PATTERNS.SCHEDULE_CREATE)
-  createSchedule(@Payload() p: { dto: any; userId: string }) {
-    return this.examsService.createSchedule(p.dto, p.userId);
+  createSchedule(@Payload() p: { dto: any; userId: string; organizationId: string }) {
+    return this.examsService.createSchedule(p.dto, p.userId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.SCHEDULE_FIND_ALL)
-  findAllSchedules(@Payload() p: { userId: string }) {
-    return this.examsService.findAllSchedules(p.userId);
+  findAllSchedules(@Payload() p: { userId: string; organizationId: string }) {
+    return this.examsService.findAllSchedules(p.userId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.SCHEDULE_FIND_ONE)
@@ -74,8 +74,8 @@ export class ExamsController {
   // ── STUDENT ────────────────────────────────────────────────────────────────
 
   @MessagePattern(EXAM_PATTERNS.STUDENT_EXAMS)
-  getStudentExams(@Payload() p: { studentId: string }): Promise<any[]> {
-    return this.examsService.getStudentExams(p.studentId);
+  getStudentExams(@Payload() p: { studentId: string; organizationId: string }): Promise<any[]> {
+    return this.examsService.getStudentExams(p.studentId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.STUDENT_PAPER)
@@ -86,8 +86,8 @@ export class ExamsController {
   // ── ATTEMPT ────────────────────────────────────────────────────────────────
 
   @MessagePattern(EXAM_PATTERNS.ATTEMPT_START)
-  startAttempt(@Payload() p: { scheduleId: string; studentId: string }) {
-    return this.examsService.startAttempt(p.scheduleId, p.studentId);
+  startAttempt(@Payload() p: { scheduleId: string; studentId: string; organizationId: string }) {
+    return this.examsService.startAttempt(p.scheduleId, p.studentId, p.organizationId);
   }
 
   @MessagePattern(EXAM_PATTERNS.ATTEMPT_SAVE)

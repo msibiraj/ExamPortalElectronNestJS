@@ -31,8 +31,8 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signup = async (name, email, password, role = 'proctor') => {
-    const { data } = await api.post('/auth/signup', { name, email, password, role });
+  const signup = async (name, email, password, role = 'proctor', organizationCode = '') => {
+    const { data } = await api.post('/auth/signup', { name, email, password, role, organizationCode });
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);

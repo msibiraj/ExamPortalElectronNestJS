@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
+import { CurrentUser } from '../decorators/current-user.decorator';
 import { MONITOR_SERVICE, MONITOR_PATTERNS, UserRole } from '@app/shared';
 import { MonitorGateway } from './monitor.gateway';
 
@@ -54,6 +55,7 @@ export class MonitorHttpController {
   @ApiOperation({ summary: 'Report a violation from candidate app' })
   async reportViolation(
     @Param('examId') examId: string,
+    @CurrentUser() user: any,
     @Body() body: {
       candidateId: string;
       candidateName: string;
@@ -63,7 +65,7 @@ export class MonitorHttpController {
       frameSnapshot?: string;
     },
   ) {
-    return this.monitorGateway.emitViolation(examId, body);
+    return this.monitorGateway.emitViolation(examId, { ...body, organizationId: user.organizationId });
   }
 
   @Post(':examId/candidates/:candidateId/extend-time')

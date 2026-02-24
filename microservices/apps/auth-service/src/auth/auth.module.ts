@@ -6,12 +6,14 @@ import { AuthService } from './auth.service';
 import { UsersModule } from '../users/users.module';
 import { TokensModule } from '../tokens/tokens.module';
 import { RedisModule } from '../redis/redis.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
     UsersModule,
     TokensModule,
     RedisModule,
+    OrganizationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

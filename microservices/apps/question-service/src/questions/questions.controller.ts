@@ -16,13 +16,13 @@ export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) {}
 
   @MessagePattern(QUESTION_PATTERNS.CREATE)
-  create(@Payload() payload: CreateQuestionDto & { userId: string }) {
+  create(@Payload() payload: CreateQuestionDto & { userId: string; organizationId: string }) {
     return this.questionsService.create(payload);
   }
 
   @MessagePattern(QUESTION_PATTERNS.FIND_ALL)
-  findAll(@Payload() payload: { filter: QuestionFilterDto; userId: string }) {
-    return this.questionsService.findAll(payload.filter);
+  findAll(@Payload() payload: { filter: QuestionFilterDto; userId: string; organizationId: string }) {
+    return this.questionsService.findAll({ ...payload.filter, userId: payload.userId, organizationId: payload.organizationId });
   }
 
   @MessagePattern(QUESTION_PATTERNS.FIND_ONE)
@@ -62,12 +62,12 @@ export class QuestionsController {
   }
 
   @MessagePattern(QUESTION_PATTERNS.EXPORT_CSV)
-  exportCsv(@Payload() payload: { userId: string }) {
-    return this.questionsService.exportCsv(payload.userId);
+  exportCsv(@Payload() payload: { userId: string; organizationId: string }) {
+    return this.questionsService.exportCsv(payload.userId, payload.organizationId);
   }
 
   @MessagePattern(QUESTION_PATTERNS.IMPORT)
-  importQuestions(@Payload() payload: ImportQuestionsDto & { userId: string }) {
+  importQuestions(@Payload() payload: ImportQuestionsDto & { userId: string; organizationId: string }) {
     return this.questionsService.importQuestions(payload);
   }
 
