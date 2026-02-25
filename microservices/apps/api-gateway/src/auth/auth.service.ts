@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import {
   AUTH_SERVICE,
   AUTH_PATTERNS,
@@ -54,7 +54,7 @@ export class AuthService {
 
   async createUser(dto: AdminCreateUserDto, organizationId: string) {
     return firstValueFrom(
-      this.authClient.send(AUTH_PATTERNS.CREATE_USER, { ...dto, organizationId }),
+      this.authClient.send(AUTH_PATTERNS.CREATE_USER, { ...dto, organizationId }).pipe(timeout(10_000)),
     );
   }
 
