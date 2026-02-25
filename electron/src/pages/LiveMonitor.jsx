@@ -289,22 +289,33 @@ function CandidateDrawer({ session, stream, violations, socket, examId, onClose,
             <div className="space-y-2">
               {violations.map((v) => (
                 <div key={v._id} className={`rounded-lg border p-3 text-xs ${
-                  v.severity === 'high' ? 'border-red-200 bg-red-50' :
+                  v.severity === 'high'   ? 'border-red-200 bg-red-50' :
                   v.severity === 'medium' ? 'border-amber-200 bg-amber-50' :
-                  'border-gray-200 bg-gray-50'
+                                            'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-gray-800">{v.type}</span>
                     <span className={`rounded-full px-1.5 py-0.5 ${
-                      v.severity === 'high' ? 'bg-red-200 text-red-700' :
+                      v.severity === 'high'   ? 'bg-red-200 text-red-700' :
                       v.severity === 'medium' ? 'bg-amber-200 text-amber-700' :
-                      'bg-gray-200 text-gray-600'
+                                                'bg-gray-200 text-gray-600'
                     }`}>
                       {v.severity}
                     </span>
                   </div>
                   {v.description && <p className="mt-1 text-gray-500">{v.description}</p>}
                   <p className="mt-1 text-gray-400">{new Date(v.createdAt).toLocaleTimeString()}</p>
+
+                  {/* Snapshot photo */}
+                  {v.frameSnapshot && (
+                    <img
+                      src={v.frameSnapshot}
+                      alt="snapshot"
+                      onClick={() => window.open(v.frameSnapshot, '_blank')}
+                      className="mt-2 w-full rounded border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                      title="Click to view full size"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -612,7 +623,7 @@ export default function LiveMonitor() {
   return (
     <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       {/* Control ribbon */}
-      <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-3 flex-shrink-0">
+      <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-3 shrink-0">
         <button onClick={() => navigate('/')} className="text-sm text-gray-500 hover:text-gray-800">
           ← Home
         </button>
@@ -727,7 +738,7 @@ export default function LiveMonitor() {
         </div>
 
         {/* Violation feed */}
-        <div className="w-72 flex-shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
+        <div className="w-72 shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-700">Violation Feed</span>
             <select
@@ -759,7 +770,7 @@ export default function LiveMonitor() {
                 >
                   <div className="flex items-start justify-between gap-1">
                     <span className="text-xs font-medium text-gray-800 leading-tight">{v.candidateName}</span>
-                    <span className={`text-xs rounded px-1 py-0.5 flex-shrink-0 ${
+                    <span className={`text-xs rounded px-1 py-0.5 shrink-0 ${
                       v.severity === 'high' ? 'bg-red-200 text-red-700' :
                       v.severity === 'medium' ? 'bg-amber-200 text-amber-700' :
                       'bg-gray-200 text-gray-600'

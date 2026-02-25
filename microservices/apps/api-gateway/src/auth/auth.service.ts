@@ -7,6 +7,7 @@ import {
   SignupDto,
   LoginDto,
   RefreshTokenDto,
+  AdminCreateUserDto,
 } from '@app/shared';
 
 @Injectable()
@@ -48,6 +49,12 @@ export class AuthService {
   async verifyToken(token: string) {
     return firstValueFrom(
       this.authClient.send(AUTH_PATTERNS.VERIFY_TOKEN, { token }),
+    );
+  }
+
+  async createUser(dto: AdminCreateUserDto, organizationId: string) {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.CREATE_USER, { ...dto, organizationId }),
     );
   }
 

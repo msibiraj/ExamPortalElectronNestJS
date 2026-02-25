@@ -96,12 +96,14 @@ export default function ExamResults() {
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Score</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Answers</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Submitted At</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Violations</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {attempts.map((attempt) => {
                       const hasScore = attempt.maxScore != null && attempt.maxScore > 0;
                       const pct = hasScore ? Math.round((attempt.score / attempt.maxScore) * 100) : null;
+                      const sid = attempt.studentId || attempt._id;
                       return (
                       <tr key={attempt._id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-800 font-medium">
@@ -127,6 +129,14 @@ export default function ExamResults() {
                           {attempt.submittedAt
                             ? new Date(attempt.submittedAt).toLocaleString()
                             : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => navigate(`/exams/${examId}/violations/${sid}`)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                          >
+                            View
+                          </button>
                         </td>
                       </tr>
                       );

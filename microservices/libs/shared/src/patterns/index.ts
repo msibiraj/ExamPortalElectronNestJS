@@ -11,6 +11,7 @@ export const AUTH_PATTERNS = {
   VERIFY_TOKEN: 'auth.verify_token',
   LOGOUT: 'auth.logout',
   GET_USER: 'auth.get_user',
+  CREATE_USER: 'auth.create_user',
   LIST_USERS: 'auth.list_users',
   UPDATE_USER: 'auth.update_user',
   DELETE_USER: 'auth.delete_user',

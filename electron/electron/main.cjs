@@ -1,11 +1,13 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 const isDev = !app.isPackaged;
 const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
 
+let mainWindow = null;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     icon: iconPath,
@@ -13,16 +15,25 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
   if (isDev) {
-    win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools();
+    mainWindow.loadURL('http://localhost:5173');
+    // Keep DevTools closed in dev so integrity check stays clean during testing
+    // mainWindow.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 }
+
+// ── IPC: integrity check (DevTools open?) ────────────────────────────────
+ipcMain.handle('check-integrity', () => ({
+  devToolsOpen: mainWindow
+    ? mainWindow.webContents.isDevToolsOpened()
+    : false,
+}));
 
 app.whenReady().then(createWindow);
 

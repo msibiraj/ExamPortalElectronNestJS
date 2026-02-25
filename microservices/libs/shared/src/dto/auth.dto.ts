@@ -33,6 +33,22 @@ export class RefreshTokenDto {
   refreshToken: string;
 }
 
+export class AdminCreateUserDto {
+  @IsString()
+  name: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
+}
+
 export class AuthResponseDto {
   accessToken: string;
   refreshToken: string;

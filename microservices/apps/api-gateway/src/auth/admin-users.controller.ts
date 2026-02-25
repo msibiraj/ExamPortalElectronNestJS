@@ -1,9 +1,9 @@
-import { Controller, Get, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
-import { UserRole } from '@app/shared';
+import { UserRole, AdminCreateUserDto } from '@app/shared';
 import { AuthService } from './auth.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
 
@@ -14,6 +14,15 @@ import { CurrentUser } from '../decorators/current-user.decorator';
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Create a user in this organization (admin only)' })
+  createUser(
+    @CurrentUser() user: any,
+    @Body() dto: AdminCreateUserDto,
+  ) {
+    return this.authService.createUser(dto, user.organizationId);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List all users in this organization (admin only)' })

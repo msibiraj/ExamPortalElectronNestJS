@@ -5,6 +5,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import ConfluenceEditor from '../components/ConfluenceEditor';
 import { useAuth } from '../context/AuthContext';
+import { useProctoring } from '../hooks/useProctoring';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const WS_URL = `${API.replace(/\/$/, '')}/monitor`;
@@ -897,6 +898,15 @@ export default function ExamSession() {
       socket.disconnect();
     };
   }, [exam, examId, authUser]);
+
+  // ── Proctoring: detect and record all cheating behaviours ────────────────
+  useProctoring({
+    webcamStreamRef: webcamStream,
+    examId,
+    candidateId:   authUser?.id || authUser?._id || '',
+    candidateName: authUser?.name || 'Student',
+    enabled:       !!exam && !submitted,
+  });
 
   // ── Timer ──
   const timer = useTimer(exam ? exam.durationMinutes * 60 : 5400);
