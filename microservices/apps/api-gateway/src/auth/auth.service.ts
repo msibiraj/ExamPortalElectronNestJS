@@ -4,7 +4,6 @@ import { firstValueFrom, timeout } from 'rxjs';
 import {
   AUTH_SERVICE,
   AUTH_PATTERNS,
-  ORG_PATTERNS,
   SignupDto,
   LoginDto,
   RefreshTokenDto,
@@ -54,18 +53,8 @@ export class AuthService {
   }
 
   async createUser(dto: AdminCreateUserDto, organizationId: string) {
-    // Fetch all orgs (already-running pattern) to resolve the admin's org code
-    const orgs: any[] = await firstValueFrom(
-      this.authClient.send(ORG_PATTERNS.LIST, {}).pipe(timeout(10_000)),
-    );
-    const org = orgs.find(
-      (o) => (o._id ?? o.id)?.toString() === organizationId,
-    );
-    if (!org) throw new Error('Organization not found');
-
-    // Reuse the existing SIGNUP pattern — no auth-service restart needed
     return firstValueFrom(
-      this.authClient.send(AUTH_PATTERNS.SIGNUP, { ...dto, organizationCode: org.code }).pipe(timeout(10_000)),
+      this.authClient.send(AUTH_PATTERNS.CREATE_USER, { ...dto, organizationId }).pipe(timeout(10_000)),
     );
   }
 
