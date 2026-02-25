@@ -43,6 +43,11 @@ export class AuthController {
     return this.authService.getUserById(data.userId);
   }
 
+  @MessagePattern(AUTH_PATTERNS.CREATE_USER)
+  createUser(@Payload() data: { name: string; email: string; password: string; role?: string; organizationId: string }) {
+    return this.authService.createUser(data);
+  }
+
   @MessagePattern(AUTH_PATTERNS.LIST_USERS)
   listUsers(@Payload() data: { organizationId: string }) {
     return this.authService.listUsers(data.organizationId);

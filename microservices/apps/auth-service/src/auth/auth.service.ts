@@ -149,6 +149,29 @@ export class AuthService {
     return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
   }
 
+  async createUser(data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: string;
+    organizationId: string;
+  }) {
+    const existing = await this.usersService.findByEmail(data.email);
+    if (existing) {
+      throw new RpcException(new ConflictException('Email already exists'));
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
+    const hashedPassword = await bcrypt.hash(data.password, saltRounds);
+
+    const user = await this.usersService.create({
+      ...data,
+      password: hashedPassword,
+    });
+
+    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
+  }
+
   async listUsers(organizationId: string) {
     const users = await this.usersService.findAll(organizationId);
     return users.map((u) => ({

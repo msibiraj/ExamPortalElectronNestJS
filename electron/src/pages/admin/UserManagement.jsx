@@ -94,7 +94,7 @@ export default function UserManagement() {
     setCreating(true);
     setCreateError('');
     try {
-      await api.post('/auth/signup', newUser);
+      await api.post('/admin/users', newUser);
       setShowCreate(false);
       setNewUser({ name: '', email: '', password: '', role: 'proctor' });
       await loadUsers();
