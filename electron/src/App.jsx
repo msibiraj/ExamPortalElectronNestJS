@@ -15,6 +15,7 @@ import ExamScheduler from './pages/ExamScheduler';
 import ExamsList from './pages/ExamsList';
 import ExamResults from './pages/ExamResults';
 import ViolationReview from './pages/ViolationReview';
+import GradeSubmission from './pages/GradeSubmission';
 import Unauthorized from './pages/Unauthorized';
 import UserManagement from './pages/admin/UserManagement';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -76,6 +77,7 @@ export default function App() {
       <Route path="/exam-schedules/:id/edit"     element={<ProctorOnly><ExamScheduler /></ProctorOnly>} />
       <Route path="/exams/:examId/results"                      element={<ProctorOnly><ExamResults /></ProctorOnly>} />
       <Route path="/exams/:examId/violations/:studentId"        element={<ProctorOnly><ViolationReview /></ProctorOnly>} />
+      <Route path="/exams/:examId/grade/:studentId"            element={<ProctorOnly><GradeSubmission /></ProctorOnly>} />
 
       {/* Live Monitor — proctor + admin only */}
       <Route path="/monitor/:examId" element={<ProctorOnly><LiveMonitor /></ProctorOnly>} />

@@ -82,6 +82,11 @@ export class QuestionsController {
     return this.questionsService.restoreVersion(questionId, { version, userId });
   }
 
+  @MessagePattern(QUESTION_PATTERNS.BULK_PUBLISH)
+  bulkPublish(@Payload() payload: { questionIds: string[]; userId: string }) {
+    return this.questionsService.bulkPublish(payload.questionIds, payload.userId);
+  }
+
   @MessagePattern(QUESTION_PATTERNS.FLAG_REVIEW)
   flagReview(@Payload() payload: { id: string; flagged: boolean }) {
     return this.questionsService.flagReview(payload.id, payload.flagged);

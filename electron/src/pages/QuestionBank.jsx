@@ -101,6 +101,24 @@ export default function QuestionBank() {
     }
   };
 
+  const handleBulkPublish = async () => {
+    if (!confirm(`Publish ${selectedIds.length} selected question(s)?`)) return;
+    try {
+      const res = await api.post('/questions/bulk-publish', { questionIds: selectedIds });
+      const { published, failed } = res.data;
+      if (failed.length > 0) {
+        alert(
+          `Published ${published}, failed ${failed.length}:\n` +
+          failed.map((f) => `• ${f.reason}`).join('\n'),
+        );
+      }
+      setSelectedIds([]);
+      fetchQuestions();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Bulk publish failed');
+    }
+  };
+
   const handleBulkTag = async () => {
     const tags = bulkTagInput.split(',').map((t) => t.trim()).filter(Boolean);
     if (!tags.length) return;
@@ -218,12 +236,20 @@ export default function QuestionBank() {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setShowBulkTag(true)}
-                className="rounded bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700"
-              >
-                Bulk Tag
-              </button>
+              <>
+                <button
+                  onClick={() => setShowBulkTag(true)}
+                  className="rounded bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700"
+                >
+                  Bulk Tag
+                </button>
+                <button
+                  onClick={handleBulkPublish}
+                  className="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
+                >
+                  Bulk Publish
+                </button>
+              </>
             )}
             <button
               onClick={() => setSelectedIds([])}

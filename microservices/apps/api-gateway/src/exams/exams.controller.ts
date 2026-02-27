@@ -107,6 +107,24 @@ export class ExamSchedulesController {
   listAttempts(@Param('id') id: string) {
     return this.examsService.listAttempts(id);
   }
+
+  @Get(':id/attempts/:studentId')
+  @Roles(UserRole.ADMIN, UserRole.PROCTOR)
+  @ApiOperation({ summary: 'Get detailed attempt for grading (includes question data)' })
+  getAttemptDetails(@Param('id') id: string, @Param('studentId') studentId: string) {
+    return this.examsService.getAttemptDetails(id, studentId);
+  }
+
+  @Post(':id/attempts/:studentId/grade')
+  @Roles(UserRole.ADMIN, UserRole.PROCTOR)
+  @ApiOperation({ summary: 'Save manual grades for descriptive/programming answers' })
+  gradeAttempt(
+    @Param('id') _id: string,
+    @Param('studentId') _studentId: string,
+    @Body() body: { attemptId: string; scores: { questionId: string; score: number }[] },
+  ) {
+    return this.examsService.gradeAttempt(body.attemptId, body.scores);
+  }
 }
 
 // ── Student exam routes (/student/exams) ─────────────────────────────────────

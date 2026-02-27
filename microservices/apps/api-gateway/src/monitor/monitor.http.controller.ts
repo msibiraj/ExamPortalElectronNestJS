@@ -52,6 +52,7 @@ export class MonitorHttpController {
   }
 
   @Post(':examId/violation')
+  @Roles(UserRole.ADMIN, UserRole.PROCTOR, UserRole.STUDENT)
   @ApiOperation({ summary: 'Report a violation from candidate app' })
   async reportViolation(
     @Param('examId') examId: string,

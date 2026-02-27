@@ -37,6 +37,8 @@ export class ExamsService {
   startAttempt(scheduleId: string, studentId: string, organizationId: string) { return this.send(EXAM_PATTERNS.ATTEMPT_START,  { scheduleId, studentId, organizationId }); }
   saveAnswer(scheduleId: string, studentId: string, answer: any)              { return this.send(EXAM_PATTERNS.ATTEMPT_SAVE,   { scheduleId, studentId, answer }); }
   submitAttempt(scheduleId: string, studentId: string, answers: any[])        { return this.send(EXAM_PATTERNS.ATTEMPT_SUBMIT, { scheduleId, studentId, answers }); }
-  getAttempt(scheduleId: string, studentId: string)                           { return this.send(EXAM_PATTERNS.ATTEMPT_GET,    { scheduleId, studentId }); }
-  listAttempts(scheduleId: string)                                             { return this.send(EXAM_PATTERNS.ATTEMPT_LIST,   { scheduleId }); }
+  getAttempt(scheduleId: string, studentId: string)                           { return this.send(EXAM_PATTERNS.ATTEMPT_GET,         { scheduleId, studentId }); }
+  listAttempts(scheduleId: string)                                             { return this.send(EXAM_PATTERNS.ATTEMPT_LIST,        { scheduleId }); }
+  getAttemptDetails(scheduleId: string, studentId: string)                    { return this.send(EXAM_PATTERNS.ATTEMPT_GET_DETAILS, { scheduleId, studentId }); }
+  gradeAttempt(attemptId: string, scores: { questionId: string; score: number }[]) { return this.send(EXAM_PATTERNS.ATTEMPT_GRADE, { attemptId, scores }); }
 }

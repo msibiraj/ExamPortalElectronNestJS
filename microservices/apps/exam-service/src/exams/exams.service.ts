@@ -307,6 +307,72 @@ export class ExamsService {
     return this.attemptModel.find({ examScheduleId: new Types.ObjectId(scheduleId) }).lean();
   }
 
+  async getAttemptDetails(scheduleId: string, studentId: string) {
+    const attempt = await this.attemptModel.findOne({
+      examScheduleId: new Types.ObjectId(scheduleId),
+      studentId: new Types.ObjectId(studentId),
+    }).lean();
+    if (!attempt) throw new RpcException(new NotFoundException('Attempt not found'));
+
+    const schedule = await this.scheduleModel.findById(scheduleId).lean();
+    const paper = schedule ? await this.paperModel.findById((schedule as any).paperId).lean() : null;
+
+    // Build marks map from paper sections
+    const marksMap = new Map<string, number>();
+    for (const section of ((paper as any)?.sections ?? [])) {
+      for (const q of (section.questions ?? [])) {
+        marksMap.set(q.questionId.toString(), q.marks ?? 0);
+      }
+    }
+
+    // Fetch all questions for this attempt
+    const questionIds = attempt.answers.map((a) => a.questionId);
+    const questions = await this.questionModel.find({ _id: { $in: questionIds } }).lean();
+    const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
+
+    // Merge answer data with question details and allocated marks
+    const answersWithDetails = attempt.answers.map((answer) => {
+      const qid = answer.questionId.toString();
+      const question: any = questionMap.get(qid);
+      return {
+        ...answer,
+        maxScore: marksMap.get(qid) ?? 0,
+        question: question
+          ? {
+              body: question.body,
+              type: question.type,
+              options: question.options ?? [],
+              markingRubric: question.markingRubric ?? null,
+              testCases: (question.testCases ?? []).filter((tc: any) => !tc.isHidden),
+            }
+          : null,
+      };
+    });
+
+    return {
+      ...attempt,
+      answers: answersWithDetails,
+      paperTitle: (paper as any)?.title ?? null,
+    };
+  }
+
+  async gradeAttempt(attemptId: string, scores: { questionId: string; score: number }[]) {
+    const attempt = await this.attemptModel.findById(attemptId);
+    if (!attempt) throw new RpcException(new NotFoundException('Attempt not found'));
+
+    for (const { questionId, score } of scores) {
+      const answer = attempt.answers.find(
+        (a) => a.questionId.toString() === questionId,
+      );
+      if (answer) (answer as any).score = score;
+    }
+
+    attempt.score = attempt.answers.reduce((sum, a) => sum + ((a as any).score ?? 0), 0);
+    attempt.markModified('answers');
+    await attempt.save();
+    return attempt.toObject();
+  }
+
   // ── helpers ────────────────────────────────────────────────────────────────
   private calcTotalMarks(sections: any[]): number {
     return sections.reduce(

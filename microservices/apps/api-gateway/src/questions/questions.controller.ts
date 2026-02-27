@@ -109,6 +109,12 @@ export class QuestionsController {
     return this.questionsService.bulkTag(dto);
   }
 
+  @Post('bulk-publish')
+  @ApiOperation({ summary: 'Publish multiple questions at once, skipping those that fail validation' })
+  bulkPublish(@Body() dto: { questionIds: string[] }, @CurrentUser() user: any) {
+    return this.questionsService.bulkPublish(dto.questionIds, user.id);
+  }
+
   @Post('import')
   @ApiOperation({ summary: 'Import questions from CSV/Moodle XML/QTI file content' })
   importQuestions(@Body() dto: ImportQuestionsDto, @CurrentUser() user: any) {

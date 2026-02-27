@@ -100,6 +100,12 @@ export class QuestionsService {
     );
   }
 
+  bulkPublish(questionIds: string[], userId: string) {
+    return firstValueFrom(
+      this.questionClient.send(QUESTION_PATTERNS.BULK_PUBLISH, { questionIds, userId }),
+    );
+  }
+
   flagReview(id: string, flagged: boolean) {
     return firstValueFrom(
       this.questionClient.send(QUESTION_PATTERNS.FLAG_REVIEW, { id, flagged }),

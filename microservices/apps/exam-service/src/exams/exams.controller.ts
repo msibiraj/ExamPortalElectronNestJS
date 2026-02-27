@@ -109,4 +109,14 @@ export class ExamsController {
   listAttempts(@Payload() p: { scheduleId: string }) {
     return this.examsService.listAttempts(p.scheduleId);
   }
+
+  @MessagePattern(EXAM_PATTERNS.ATTEMPT_GET_DETAILS)
+  getAttemptDetails(@Payload() p: { scheduleId: string; studentId: string }) {
+    return this.examsService.getAttemptDetails(p.scheduleId, p.studentId);
+  }
+
+  @MessagePattern(EXAM_PATTERNS.ATTEMPT_GRADE)
+  gradeAttempt(@Payload() p: { attemptId: string; scores: { questionId: string; score: number }[] }) {
+    return this.examsService.gradeAttempt(p.attemptId, p.scores);
+  }
 }

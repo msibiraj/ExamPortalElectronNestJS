@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { RpcExceptionFilter } from './filters/rpc-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,6 +11,8 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
+
+  app.useGlobalFilters(new RpcExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

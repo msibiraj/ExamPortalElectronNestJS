@@ -33,6 +33,7 @@ export const QUESTION_PATTERNS = {
   RESTORE_VERSION: 'question.restore_version',
   FLAG_REVIEW: 'question.flag_review',
   CLEAR_FLAG: 'question.clear_flag',
+  BULK_PUBLISH: 'question.bulk_publish',
 };
 
 export const EXAM_PATTERNS = {
@@ -55,6 +56,8 @@ export const EXAM_PATTERNS = {
   ATTEMPT_SUBMIT: 'exam.attempt.submit',
   ATTEMPT_GET: 'exam.attempt.get',
   ATTEMPT_LIST: 'exam.attempt.list',
+  ATTEMPT_GET_DETAILS: 'exam.attempt.get_details',
+  ATTEMPT_GRADE: 'exam.attempt.grade',
 };
 
 export const MONITOR_PATTERNS = {

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -51,7 +51,7 @@ api.interceptors.response.use(
       if (!refreshToken) {
         isRefreshing = false;
         localStorage.clear();
-        window.location.hash = '#/login';
+        window.location.hash = '/login';
         return Promise.reject(error);
       }
 
@@ -67,7 +67,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         localStorage.clear();
-        window.location.hash = '#/login';
+        window.location.hash = '/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

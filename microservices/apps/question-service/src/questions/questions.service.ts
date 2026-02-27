@@ -245,6 +245,29 @@ export class QuestionsService {
     return question.toObject();
   }
 
+  // ── BULK PUBLISH ───────────────────────────────────────────────────────────
+
+  async bulkPublish(questionIds: string[], userId: string) {
+    const published: string[] = [];
+    const failed: { id: string; reason: string }[] = [];
+
+    for (const id of questionIds) {
+      try {
+        await this.publish(id, userId);
+        published.push(id);
+      } catch (err) {
+        const error = err instanceof RpcException ? err.getError() : err;
+        const message =
+          typeof error === 'object' && error !== null
+            ? (error as any).message || String(error)
+            : String(error);
+        failed.push({ id, reason: message });
+      }
+    }
+
+    return { published: published.length, failed };
+  }
+
   // ── FLAG FOR REVIEW ────────────────────────────────────────────────────────
 
   async flagReview(id: string, flagged: boolean) {
@@ -299,13 +322,43 @@ export class QuestionsService {
 
   private parseCsv(content: string): any[] {
     const lines = content.trim().split('\n');
-    const headers = lines[0].split(',');
-    return lines.slice(1).map((line) => {
+    const headers = lines[0].split(',').map((h) => h.trim());
+    return lines.slice(1).filter((line) => line.trim()).map((line) => {
       const values = line.split(',');
       const obj: Record<string, any> = {};
-      headers.forEach((h, i) => (obj[h.trim()] = values[i]?.trim() ?? ''));
+      headers.forEach((h, i) => (obj[h] = values[i]?.trim() ?? ''));
       if (obj.tags) obj.tags = obj.tags.split('|').filter(Boolean);
       if (obj.marks) obj.marks = parseFloat(obj.marks);
+      if (obj.options) {
+        obj.options = obj.options
+          .split('|')
+          .filter(Boolean)
+          .map((opt: string) => {
+            const isCorrect = opt.startsWith('*');
+            const text = isCorrect ? opt.slice(1).trim() : opt.trim();
+            return { text, isCorrect };
+          });
+        if (!obj.options.length) delete obj.options;
+      }
+      if (obj.testCases) {
+        obj.testCases = obj.testCases
+          .split('|')
+          .filter(Boolean)
+          .map((tc: string) => {
+            const parts = tc.split(';');
+            return {
+              input: (parts[0] || '').trim(),
+              expectedOutput: (parts[1] || '').trim(),
+              weight: parseFloat(parts[2]) || 100,
+              isHidden: false,
+            };
+          })
+          .filter((tc: any) => tc.input || tc.expectedOutput);
+        if (!obj.testCases.length) delete obj.testCases;
+      }
+      // Remove any remaining string values for array fields (empty CSV columns)
+      if (typeof obj.options === 'string') delete obj.options;
+      if (typeof obj.testCases === 'string') delete obj.testCases;
       return obj;
     });
   }

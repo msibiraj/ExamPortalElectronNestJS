@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { RpcException } from '@nestjs/microservices';
 import { User, UserDocument } from './schemas/user.schema';
 
 @Injectable()
@@ -14,7 +15,14 @@ export class UsersService {
     organizationId: string;
     role?: string;
   }): Promise<UserDocument> {
-    return this.userModel.create(data);
+    try {
+      return await this.userModel.create(data);
+    } catch (err) {
+      if (err?.code === 11000) {
+        throw new RpcException(new ConflictException('Email already exists'));
+      }
+      throw err;
+    }
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {

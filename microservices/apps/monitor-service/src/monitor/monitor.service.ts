@@ -111,14 +111,22 @@ export class MonitorService {
       },
     );
 
-    await this.sessionModel.findOneAndUpdate(
-      {
-        examId: new Types.ObjectId(examId),
-        candidateId: new Types.ObjectId(candidateId),
-        $where: `function() { const order = {none:0,low:1,medium:2,high:3}; return (order['${data.severity}'] || 0) > (order[this.highestSeverity] || 0); }`,
-      },
-      { $set: { highestSeverity: data.severity } },
-    );
+    const lowerSeverities: Record<string, string[]> = {
+      low: ['none'],
+      medium: ['none', 'low'],
+      high: ['none', 'low', 'medium'],
+    };
+    const lower = lowerSeverities[data.severity];
+    if (lower) {
+      await this.sessionModel.findOneAndUpdate(
+        {
+          examId: new Types.ObjectId(examId),
+          candidateId: new Types.ObjectId(candidateId),
+          highestSeverity: { $in: lower },
+        },
+        { $set: { highestSeverity: data.severity } },
+      );
+    }
 
     return violation.toObject();
   }

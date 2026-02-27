@@ -7,7 +7,7 @@ import ConfluenceEditor from '../components/ConfluenceEditor';
 import { useAuth } from '../context/AuthContext';
 import { useProctoring } from '../hooks/useProctoring';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/?$/, '/');
 const WS_URL = `${API.replace(/\/$/, '')}/monitor`;
 
 // ── Language config ──────────────────────────────────────────────────────────

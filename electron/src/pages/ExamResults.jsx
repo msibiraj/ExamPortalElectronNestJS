@@ -96,6 +96,7 @@ export default function ExamResults() {
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Score</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Answers</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Submitted At</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Grade</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Violations</th>
                     </tr>
                   </thead>
@@ -129,6 +130,20 @@ export default function ExamResults() {
                           {attempt.submittedAt
                             ? new Date(attempt.submittedAt).toLocaleString()
                             : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {(attempt.status === 'submitted' || attempt.status === 'timed-out') && (
+                            <button
+                              onClick={() => navigate(`/exams/${examId}/grade/${sid}`)}
+                              className={`text-xs font-medium rounded px-2 py-1 ${
+                                hasScore && pct !== null
+                                  ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                              }`}
+                            >
+                              {hasScore && pct !== null ? 'Re-grade' : 'Grade'}
+                            </button>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <button

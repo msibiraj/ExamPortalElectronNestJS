@@ -100,6 +100,7 @@ export function useProctoring({
         !videoRef.current.srcObject
       ) {
         videoRef.current.srcObject = webcamStreamRef.current;
+        videoRef.current.play().catch(() => {});
       }
     }, 500);
     return () => clearInterval(id);
@@ -176,6 +177,7 @@ export function useProctoring({
         report({
           type: 'tab-switch', severity: 'high',
           description: 'Student navigated away from the exam tab',
+          withSnapshot: false,
         });
       }
     };
@@ -189,6 +191,7 @@ export function useProctoring({
     const handler = () => report({
       type: 'window-blur', severity: 'medium',
       description: 'Exam window lost focus — another application may have been opened',
+      withSnapshot: false,
     });
     window.addEventListener('blur', handler);
     return () => window.removeEventListener('blur', handler);
@@ -323,6 +326,7 @@ export function useProctoring({
         report({
           type: 'camera-offline', severity: 'high',
           description: 'Camera feed is extremely dark — camera may be covered or disabled',
+          withSnapshot: false,
         });
       }
 
@@ -515,7 +519,7 @@ export function useProctoring({
             report({
               type: 'background-noise', severity: 'low',
               description: `Background noise/voice detected (level ${Math.round(rms)})`,
-              withSnapshot: true,
+              withSnapshot: false,
             });
           }
         }, AUDIO_CHECK_INTERVAL_MS);
