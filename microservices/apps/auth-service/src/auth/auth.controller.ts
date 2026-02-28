@@ -8,10 +8,14 @@ import {
   RefreshTokenDto,
 } from '@app/shared';
 import { AuthService } from './auth.service';
+import { InvitesService } from '../invites/invites.service';
 
 @Controller()
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly invitesService: InvitesService,
+  ) {}
 
   @MessagePattern(AUTH_PATTERNS.SIGNUP)
   signup(@Payload() signupDto: SignupDto) {
@@ -76,5 +80,20 @@ export class AuthController {
   @MessagePattern(ORG_PATTERNS.LIST)
   listOrganizations() {
     return this.authService.listOrganizations();
+  }
+
+  @MessagePattern(AUTH_PATTERNS.INVITE_CREATE)
+  createInvite(@Payload() data: { orgId: string; role: string; createdBy: string }) {
+    return this.invitesService.createInvite(data.orgId, data.role, data.createdBy);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.INVITE_GET)
+  getInvite(@Payload() data: { token: string }) {
+    return this.invitesService.getInvite(data.token);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.INVITE_REDEEM)
+  redeemInvite(@Payload() data: { token: string; name: string; email: string; password: string }) {
+    return this.invitesService.redeemInvite(data.token, data.name, data.email, data.password);
   }
 }

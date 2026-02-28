@@ -7,6 +7,7 @@ import { AdminUsersController } from './admin-users.controller';
 import { AuthService } from './auth.service';
 import { OrganizationsController } from './organizations.controller';
 import { OrganizationsService } from './organizations.service';
+import { InvitesController } from './invites.controller';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 
@@ -30,7 +31,7 @@ import { RolesGuard } from '../guards/roles.guard';
       },
     ]),
   ],
-  controllers: [AuthController, AdminUsersController, OrganizationsController],
+  controllers: [AuthController, AdminUsersController, OrganizationsController, InvitesController],
   providers: [AuthService, OrganizationsService, JwtAuthGuard, RolesGuard],
   exports: [AuthService, JwtAuthGuard, ClientsModule],
 })

@@ -15,6 +15,9 @@ export const AUTH_PATTERNS = {
   LIST_USERS: 'auth.list_users',
   UPDATE_USER: 'auth.update_user',
   DELETE_USER: 'auth.delete_user',
+  INVITE_CREATE: 'auth.invite.create',
+  INVITE_GET: 'auth.invite.get',
+  INVITE_REDEEM: 'auth.invite.redeem',
 };
 
 export const QUESTION_PATTERNS = {

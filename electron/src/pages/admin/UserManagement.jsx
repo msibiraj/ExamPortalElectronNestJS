@@ -47,6 +47,14 @@ export default function UserManagement() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting]   = useState(false);
 
+  // Invite state
+  const [showInvite, setShowInvite]   = useState(false);
+  const [inviteRole, setInviteRole]   = useState('student');
+  const [inviteResult, setInviteResult] = useState(null); // { link, expiresAt, role }
+  const [inviting, setInviting]       = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [copied, setCopied]           = useState(false);
+
   async function loadUsers() {
     setLoading(true);
     setError('');
@@ -105,6 +113,28 @@ export default function UserManagement() {
     }
   }
 
+  async function generateInvite() {
+    setInviting(true);
+    setInviteError('');
+    setInviteResult(null);
+    try {
+      const { data } = await api.post('/admin/users/invites', { role: inviteRole });
+      setInviteResult(data);
+    } catch (err) {
+      setInviteError(err.response?.data?.message || 'Failed to generate invite link');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  function copyLink() {
+    if (!inviteResult?.link) return;
+    navigator.clipboard.writeText(inviteResult.link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   const displayed = users.filter((u) => {
     const matchSearch = !search ||
       u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,12 +161,20 @@ export default function UserManagement() {
               Admin only
             </span>
           </div>
-          <button
-            onClick={() => { setShowCreate(true); setCreateError(''); }}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 transition-colors"
-          >
-            + Add User
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(''); setCopied(false); }}
+              className="rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold px-4 py-2 transition-colors"
+            >
+              Invite User
+            </button>
+            <button
+              onClick={() => { setShowCreate(true); setCreateError(''); }}
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 transition-colors"
+            >
+              + Add User
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -325,6 +363,92 @@ export default function UserManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invite User Modal ─────────────────────────────────────────── */}
+      {showInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Invite User</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Generate a single-use link. The recipient fills in their own details — no password needed from you.
+            </p>
+
+            {inviteError && (
+              <div className="mb-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">{inviteError}</div>
+            )}
+
+            {!inviteResult ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option value="student">Student</option>
+                    <option value="proctor">Proctor</option>
+                  </select>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={generateInvite}
+                    disabled={inviting}
+                    className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition-colors disabled:opacity-50"
+                  >
+                    {inviting ? 'Generating…' : 'Generate Link'}
+                  </button>
+                  <button
+                    onClick={() => setShowInvite(false)}
+                    className="flex-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold py-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-green-50 border border-green-200 p-3">
+                  <p className="text-xs font-medium text-green-700 mb-2">
+                    Link generated for <strong className="capitalize">{inviteResult.role}</strong> · expires {new Date(inviteResult.expiresAt).toLocaleDateString()}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={inviteResult.link}
+                      className="flex-1 rounded border border-green-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none"
+                      onClick={(e) => e.target.select()}
+                    />
+                    <button
+                      onClick={copyLink}
+                      className="shrink-0 rounded bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  This link works for one person only and expires in 7 days. Share it directly with the intended recipient.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setInviteResult(null); setInviteError(''); }}
+                    className="flex-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold py-2 transition-colors"
+                  >
+                    Generate Another
+                  </button>
+                  <button
+                    onClick={() => setShowInvite(false)}
+                    className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

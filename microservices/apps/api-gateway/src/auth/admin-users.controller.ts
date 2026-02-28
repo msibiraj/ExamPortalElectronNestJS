@@ -44,4 +44,13 @@ export class AdminUsersController {
   deleteUser(@Param('id') id: string) {
     return this.authService.deleteUser(id);
   }
+
+  @Post('invites')
+  @ApiOperation({ summary: 'Generate a single-use invite link (admin only)' })
+  createInvite(
+    @CurrentUser() user: any,
+    @Body() body: { role: 'student' | 'proctor' },
+  ) {
+    return this.authService.createInvite(user.organizationId, body.role, user.id);
+  }
 }

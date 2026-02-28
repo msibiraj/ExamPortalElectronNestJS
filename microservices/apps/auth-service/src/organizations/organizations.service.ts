@@ -21,4 +21,8 @@ export class OrganizationsService {
   async findAll(): Promise<OrganizationDocument[]> {
     return this.orgModel.find().sort({ createdAt: -1 }).exec();
   }
+
+  async findById(id: string): Promise<OrganizationDocument | null> {
+    return this.orgModel.findById(id).exec();
+  }
 }

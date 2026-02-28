@@ -69,4 +69,22 @@ export class AuthService {
   async deleteUser(userId: string) {
     return firstValueFrom(this.authClient.send(AUTH_PATTERNS.DELETE_USER, { userId }));
   }
+
+  async createInvite(orgId: string, role: string, createdBy: string) {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.INVITE_CREATE, { orgId, role, createdBy }),
+    );
+  }
+
+  async getInvite(token: string) {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.INVITE_GET, { token }),
+    );
+  }
+
+  async redeemInvite(token: string, name: string, email: string, password: string) {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.INVITE_REDEEM, { token, name, email, password }),
+    );
+  }
 }
