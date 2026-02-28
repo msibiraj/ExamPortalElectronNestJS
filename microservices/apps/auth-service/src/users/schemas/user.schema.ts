@@ -21,6 +21,9 @@ export class User {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Organization', index: true })
   organizationId: Types.ObjectId;
 
+  @Prop({ type: [String], default: null })
+  permissions: string[] | null;
+
   createdAt: Date;
   updatedAt: Date;
 }

@@ -18,6 +18,33 @@ function RoleBadge({ role }) {
   );
 }
 
+const PERM_LABEL = {
+  manage_users:      'Users',
+  manage_exams:      'Exams',
+  manage_questions:  'Questions',
+  view_reports:      'Reports',
+  manage_proctoring: 'Proctoring',
+};
+
+function PermissionBadges({ role, permissions }) {
+  if (role !== 'admin') return null;
+  if (permissions === null || permissions === undefined) {
+    return <span className="rounded-full bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5">All</span>;
+  }
+  if (permissions.length === 0) {
+    return <span className="rounded-full bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5">None</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {permissions.map((p) => (
+        <span key={p} className="rounded-full bg-indigo-50 text-indigo-600 text-xs font-medium px-2 py-0.5 border border-indigo-200">
+          {PERM_LABEL[p] ?? p}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -217,6 +244,7 @@ export default function UserManagement() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Email</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Role</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Permissions</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Created</th>
                   <th className="px-5 py-3" />
                 </tr>
@@ -243,6 +271,7 @@ export default function UserManagement() {
                             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                           </select>
                         </td>
+                        <td className="px-5 py-3"><PermissionBadges role={editRole} permissions={u.permissions} /></td>
                         <td className="px-5 py-3 text-gray-400">{formatDate(u.createdAt)}</td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2 justify-end">
@@ -267,6 +296,7 @@ export default function UserManagement() {
                         <td className="px-5 py-3 font-medium text-gray-800">{u.name}</td>
                         <td className="px-5 py-3 text-gray-500">{u.email}</td>
                         <td className="px-5 py-3"><RoleBadge role={u.role} /></td>
+                        <td className="px-5 py-3"><PermissionBadges role={u.role} permissions={u.permissions} /></td>
                         <td className="px-5 py-3 text-gray-400">{formatDate(u.createdAt)}</td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2 justify-end">

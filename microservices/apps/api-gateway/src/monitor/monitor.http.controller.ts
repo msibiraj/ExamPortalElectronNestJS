@@ -5,14 +5,16 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../decorators/roles.decorator';
+import { RequirePermissions } from '../decorators/permissions.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
-import { MONITOR_SERVICE, MONITOR_PATTERNS, UserRole } from '@app/shared';
+import { MONITOR_SERVICE, MONITOR_PATTERNS, UserRole, AdminPermission } from '@app/shared';
 import { MonitorGateway } from './monitor.gateway';
 
 @ApiTags('Monitor')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(UserRole.ADMIN, UserRole.PROCTOR)
 @Controller('monitor')
 export class MonitorHttpController {
@@ -22,6 +24,7 @@ export class MonitorHttpController {
   ) {}
 
   @Get(':examId/sessions')
+  @RequirePermissions(AdminPermission.VIEW_REPORTS)
   @ApiOperation({ summary: 'Get all candidate sessions for an exam' })
   getSessions(@Param('examId') examId: string) {
     return firstValueFrom(
@@ -30,6 +33,7 @@ export class MonitorHttpController {
   }
 
   @Get(':examId/violations')
+  @RequirePermissions(AdminPermission.VIEW_REPORTS)
   @ApiOperation({ summary: 'Get violation feed for an exam' })
   getViolations(
     @Param('examId') examId: string,
@@ -41,6 +45,7 @@ export class MonitorHttpController {
   }
 
   @Get(':examId/violations/:candidateId')
+  @RequirePermissions(AdminPermission.VIEW_REPORTS)
   @ApiOperation({ summary: 'Get violations for a specific candidate' })
   getCandidateViolations(
     @Param('examId') examId: string,
@@ -70,6 +75,7 @@ export class MonitorHttpController {
   }
 
   @Post(':examId/candidates/:candidateId/extend-time')
+  @RequirePermissions(AdminPermission.MANAGE_PROCTORING)
   @ApiOperation({ summary: 'Extend time for a candidate (live)' })
   extendTime(
     @Param('examId') examId: string,
@@ -86,6 +92,7 @@ export class MonitorHttpController {
   }
 
   @Post(':examId/candidates/:candidateId/terminate')
+  @RequirePermissions(AdminPermission.MANAGE_PROCTORING)
   @ApiOperation({ summary: 'Terminate a candidate exam' })
   terminate(
     @Param('examId') examId: string,

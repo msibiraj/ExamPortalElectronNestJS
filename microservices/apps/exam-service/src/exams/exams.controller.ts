@@ -111,7 +111,7 @@ export class ExamsController {
   }
 
   @MessagePattern(EXAM_PATTERNS.ATTEMPT_GET_DETAILS)
-  getAttemptDetails(@Payload() p: { scheduleId: string; studentId: string }) {
+  getAttemptDetails(@Payload() p: { scheduleId: string; studentId: string }): Promise<any> {
     return this.examsService.getAttemptDetails(p.scheduleId, p.studentId);
   }
 

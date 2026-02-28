@@ -10,6 +10,7 @@ import { OrganizationsService } from './organizations.service';
 import { InvitesController } from './invites.controller';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { RolesGuard } from '../guards/roles.guard';
     ]),
   ],
   controllers: [AuthController, AdminUsersController, OrganizationsController, InvitesController],
-  providers: [AuthService, OrganizationsService, JwtAuthGuard, RolesGuard],
-  exports: [AuthService, JwtAuthGuard, ClientsModule],
+  providers: [AuthService, OrganizationsService, JwtAuthGuard, RolesGuard, PermissionsGuard],
+  exports: [AuthService, JwtAuthGuard, PermissionsGuard, ClientsModule],
 })
 export class AuthModule {}

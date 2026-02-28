@@ -4,3 +4,5 @@ export enum UserRole {
   STUDENT = 'student',
   PROCTOR = 'proctor',
 }
+
+export * from './permissions.enum';

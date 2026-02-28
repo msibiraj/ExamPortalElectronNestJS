@@ -307,7 +307,7 @@ export class ExamsService {
     return this.attemptModel.find({ examScheduleId: new Types.ObjectId(scheduleId) }).lean();
   }
 
-  async getAttemptDetails(scheduleId: string, studentId: string) {
+  async getAttemptDetails(scheduleId: string, studentId: string): Promise<any> {
     const attempt = await this.attemptModel.findOne({
       examScheduleId: new Types.ObjectId(scheduleId),
       studentId: new Types.ObjectId(studentId),

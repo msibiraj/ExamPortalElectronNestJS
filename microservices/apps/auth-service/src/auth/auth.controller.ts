@@ -96,4 +96,9 @@ export class AuthController {
   redeemInvite(@Payload() data: { token: string; name: string; email: string; password: string }) {
     return this.invitesService.redeemInvite(data.token, data.name, data.email, data.password);
   }
+
+  @MessagePattern(AUTH_PATTERNS.SET_PERMISSIONS)
+  setPermissions(@Payload() data: { userId: string; permissions: string[] | null }) {
+    return this.authService.setUserPermissions(data.userId, data.permissions);
+  }
 }

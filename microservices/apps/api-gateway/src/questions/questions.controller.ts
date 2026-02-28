@@ -20,7 +20,9 @@ import { Response } from 'express';
 import { QuestionsService } from './questions.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../decorators/roles.decorator';
+import { RequirePermissions } from '../decorators/permissions.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import {
   CreateQuestionDto,
@@ -31,12 +33,14 @@ import {
   RestoreVersionDto,
   FlagReviewDto,
   UserRole,
+  AdminPermission,
 } from '@app/shared';
 
 @ApiTags('Questions')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(UserRole.ADMIN, UserRole.PROCTOR)
+@RequirePermissions(AdminPermission.MANAGE_QUESTIONS)
 @Controller('questions')
 export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) {}

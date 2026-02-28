@@ -48,4 +48,11 @@ export class UsersService {
   async deleteUser(id: string): Promise<void> {
     await this.userModel.findByIdAndDelete(id).exec();
   }
+
+  async setPermissions(userId: string, permissions: string[] | null): Promise<UserDocument | null> {
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: { permissions } }, { new: true })
+      .select('-password')
+      .exec();
+  }
 }

@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -45,13 +46,13 @@ export class AuthService {
       organizationId: org.id,
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString());
+    const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString(), user.permissions);
     await this.tokensService.saveRefreshToken(user.id, tokens.refreshToken);
 
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
     };
   }
 
@@ -66,13 +67,13 @@ export class AuthService {
       throw new RpcException(new UnauthorizedException('Invalid credentials'));
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString());
+    const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString(), user.permissions);
     await this.tokensService.saveRefreshToken(user.id, tokens.refreshToken);
 
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
     };
   }
 
@@ -95,14 +96,15 @@ export class AuthService {
       await this.tokensService.removeRefreshToken(payload.sub, refreshTokenDto.refreshToken);
       await this.redisService.blacklistToken(refreshTokenDto.refreshToken, this.getRefreshTtlSeconds());
 
+      // Re-fetch user from DB so permissions are always up-to-date
       const user = await this.usersService.findById(payload.sub);
-      const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString());
+      const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString(), user.permissions);
       await this.tokensService.saveRefreshToken(user.id, tokens.refreshToken);
 
       return {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
       };
     } catch (error) {
       if (error instanceof RpcException) throw error;
@@ -128,6 +130,7 @@ export class AuthService {
         email: payload.email,
         role: payload.role,
         organizationId: payload.organizationId,
+        permissions: payload.permissions ?? null,
       };
     } catch (error) {
       if (error instanceof RpcException) throw error;
@@ -146,7 +149,7 @@ export class AuthService {
     if (!user) {
       throw new RpcException(new UnauthorizedException('User not found'));
     }
-    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions };
   }
 
   async createUser(data: {
@@ -169,7 +172,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions };
   }
 
   async listUsers(organizationId: string) {
@@ -180,6 +183,7 @@ export class AuthService {
       name: u.name,
       role: u.role,
       organizationId: u.organizationId,
+      permissions: u.permissions,
       createdAt: u.createdAt,
     }));
   }
@@ -195,6 +199,12 @@ export class AuthService {
     return { message: 'User deleted' };
   }
 
+  async setUserPermissions(userId: string, permissions: string[] | null) {
+    const user = await this.usersService.setPermissions(userId, permissions);
+    if (!user) throw new RpcException(new NotFoundException('User not found'));
+    return { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions };
+  }
+
   async createOrganization(name: string, code: string) {
     return this.orgsService.create(name, code);
   }
@@ -207,13 +217,14 @@ export class AuthService {
     return this.orgsService.findAll();
   }
 
-  private async generateTokens(userId: string, email: string, role: string, organizationId: string) {
+  private async generateTokens(userId: string, email: string, role: string, organizationId: string, permissions?: string[] | null) {
     const accessPayload: IJwtPayload = {
       sub: userId,
       email,
       role: role as any,
       organizationId,
       type: 'access',
+      permissions: permissions ?? null,
     };
     const refreshPayload: IJwtPayload = {
       sub: userId,

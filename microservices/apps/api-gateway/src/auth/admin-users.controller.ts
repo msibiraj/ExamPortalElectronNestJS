@@ -2,15 +2,18 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@n
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../decorators/roles.decorator';
-import { UserRole, AdminCreateUserDto } from '@app/shared';
+import { RequirePermissions } from '../decorators/permissions.decorator';
+import { UserRole, AdminCreateUserDto, AdminPermission } from '@app/shared';
 import { AuthService } from './auth.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
 
 @ApiTags('Admin — Users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(UserRole.ADMIN)
+@RequirePermissions(AdminPermission.MANAGE_USERS)
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly authService: AuthService) {}

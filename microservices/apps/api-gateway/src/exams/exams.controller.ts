@@ -6,15 +6,18 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ExamsService } from './exams.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../decorators/roles.decorator';
+import { RequirePermissions } from '../decorators/permissions.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
-import { UserRole } from '@app/shared';
+import { UserRole, AdminPermission } from '@app/shared';
 
 // ── Proctor / Admin routes (/exam-papers, /exam-schedules) ───────────────────
 
 @ApiTags('Exam Papers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequirePermissions(AdminPermission.MANAGE_EXAMS)
 @Controller('exam-papers')
 export class ExamPapersController {
   constructor(private readonly examsService: ExamsService) {}
@@ -61,7 +64,8 @@ export class ExamPapersController {
 
 @ApiTags('Exam Schedules')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequirePermissions(AdminPermission.MANAGE_EXAMS)
 @Controller('exam-schedules')
 export class ExamSchedulesController {
   constructor(private readonly examsService: ExamsService) {}

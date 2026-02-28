@@ -6,4 +6,5 @@ export interface IJwtPayload {
   role: UserRole;
   organizationId: string;
   type: 'access' | 'refresh';
+  permissions?: string[] | null;
 }

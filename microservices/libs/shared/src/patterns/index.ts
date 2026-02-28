@@ -18,6 +18,7 @@ export const AUTH_PATTERNS = {
   INVITE_CREATE: 'auth.invite.create',
   INVITE_GET: 'auth.invite.get',
   INVITE_REDEEM: 'auth.invite.redeem',
+  SET_PERMISSIONS: 'auth.set_permissions',
 };
 
 export const QUESTION_PATTERNS = {
