@@ -356,9 +356,11 @@ export class QuestionsService {
           .filter((tc: any) => tc.input || tc.expectedOutput);
         if (!obj.testCases.length) delete obj.testCases;
       }
-      // Remove any remaining string values for array fields (empty CSV columns)
-      if (typeof obj.options === 'string') delete obj.options;
-      if (typeof obj.testCases === 'string') delete obj.testCases;
+      // Remove non-array values for array/subdoc fields (empty CSV cells produce '')
+      if (!Array.isArray(obj.options)) delete obj.options;
+      if (!Array.isArray(obj.testCases)) delete obj.testCases;
+      // Remove CSV-only fields that have no meaning in the schema
+      delete obj.id;
       return obj;
     });
   }
