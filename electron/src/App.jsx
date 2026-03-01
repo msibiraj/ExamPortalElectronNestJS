@@ -36,6 +36,18 @@ function AdminOnly({ children }) {
   return <ProtectedRoute allowedRoles={['admin']}>{children}</ProtectedRoute>;
 }
 
+/**
+ * For admin users: requires the user to hold at least one of the listed permissions.
+ * Proctors and students pass through — their access is governed by ProctorOnly/AdminOnly above.
+ * Admin with permissions === null (super admin) also passes through.
+ */
+function WithPermission({ children, anyOf }) {
+  const { user, hasAnyPermission } = useAuth();
+  if (user?.role !== 'admin') return children;
+  if (hasAnyPermission(...anyOf)) return children;
+  return <Navigate to="/unauthorized" replace />;
+}
+
 /** Root redirect: student → /student, proctor/admin → /dashboard */
 function RoleHome() {
   const { user, loading } = useAuth();
@@ -62,31 +74,35 @@ export default function App() {
       {/* Student home */}
       <Route path="/student" element={<Protected><StudentDashboard /></Protected>} />
 
-      {/* Question Bank — proctor + admin only */}
-      <Route path="/questions"              element={<ProctorOnly><QuestionBank /></ProctorOnly>} />
-      <Route path="/questions/new"          element={<ProctorOnly><QuestionEditor /></ProctorOnly>} />
-      <Route path="/questions/import"       element={<ProctorOnly><QuestionImport /></ProctorOnly>} />
-      <Route path="/questions/:id/edit"     element={<ProctorOnly><QuestionEditor /></ProctorOnly>} />
-      <Route path="/questions/:id/history"  element={<ProctorOnly><QuestionHistory /></ProctorOnly>} />
+      {/* Question Bank — proctor always; admin needs manage_questions */}
+      <Route path="/questions"             element={<ProctorOnly><WithPermission anyOf={['manage_questions']}><QuestionBank /></WithPermission></ProctorOnly>} />
+      <Route path="/questions/new"         element={<ProctorOnly><WithPermission anyOf={['manage_questions']}><QuestionEditor /></WithPermission></ProctorOnly>} />
+      <Route path="/questions/import"      element={<ProctorOnly><WithPermission anyOf={['manage_questions']}><QuestionImport /></WithPermission></ProctorOnly>} />
+      <Route path="/questions/:id/edit"    element={<ProctorOnly><WithPermission anyOf={['manage_questions']}><QuestionEditor /></WithPermission></ProctorOnly>} />
+      <Route path="/questions/:id/history" element={<ProctorOnly><WithPermission anyOf={['manage_questions']}><QuestionHistory /></WithPermission></ProctorOnly>} />
 
-      {/* Exam Papers + Schedules — proctor + admin only */}
-      <Route path="/exams"                       element={<ProctorOnly><ExamsList /></ProctorOnly>} />
-      <Route path="/exam-papers/new"             element={<ProctorOnly><ExamBuilder /></ProctorOnly>} />
-      <Route path="/exam-papers/:id/edit"        element={<ProctorOnly><ExamBuilder /></ProctorOnly>} />
-      <Route path="/exam-schedules/new"          element={<ProctorOnly><ExamScheduler /></ProctorOnly>} />
-      <Route path="/exam-schedules/:id/edit"     element={<ProctorOnly><ExamScheduler /></ProctorOnly>} />
-      <Route path="/exams/:examId/results"                      element={<ProctorOnly><ExamResults /></ProctorOnly>} />
-      <Route path="/exams/:examId/violations/:studentId"        element={<ProctorOnly><ViolationReview /></ProctorOnly>} />
-      <Route path="/exams/:examId/grade/:studentId"            element={<ProctorOnly><GradeSubmission /></ProctorOnly>} />
+      {/* Exam Papers & Schedules — proctor always; admin needs manage_exams */}
+      <Route path="/exam-papers/new"         element={<ProctorOnly><WithPermission anyOf={['manage_exams']}><ExamBuilder /></WithPermission></ProctorOnly>} />
+      <Route path="/exam-papers/:id/edit"    element={<ProctorOnly><WithPermission anyOf={['manage_exams']}><ExamBuilder /></WithPermission></ProctorOnly>} />
+      <Route path="/exam-schedules/new"      element={<ProctorOnly><WithPermission anyOf={['manage_exams']}><ExamScheduler /></WithPermission></ProctorOnly>} />
+      <Route path="/exam-schedules/:id/edit" element={<ProctorOnly><WithPermission anyOf={['manage_exams']}><ExamScheduler /></WithPermission></ProctorOnly>} />
 
-      {/* Live Monitor — proctor + admin only */}
-      <Route path="/monitor/:examId" element={<ProctorOnly><LiveMonitor /></ProctorOnly>} />
+      {/* Exams list — admin needs manage_exams OR view_reports */}
+      <Route path="/exams" element={<ProctorOnly><WithPermission anyOf={['manage_exams', 'view_reports']}><ExamsList /></WithPermission></ProctorOnly>} />
 
-      {/* Admin — user management */}
-      <Route path="/admin/users" element={<AdminOnly><UserManagement /></AdminOnly>} />
+      {/* Results & violations — admin needs view_reports */}
+      <Route path="/exams/:examId/results"               element={<ProctorOnly><WithPermission anyOf={['view_reports']}><ExamResults /></WithPermission></ProctorOnly>} />
+      <Route path="/exams/:examId/violations/:studentId" element={<ProctorOnly><WithPermission anyOf={['view_reports']}><ViolationReview /></WithPermission></ProctorOnly>} />
 
-      {/* Live Monitor List */}
-      <Route path="/monitor" element={<ProctorOnly><MonitorList /></ProctorOnly>} />
+      {/* Grading — admin needs manage_exams */}
+      <Route path="/exams/:examId/grade/:studentId" element={<ProctorOnly><WithPermission anyOf={['manage_exams']}><GradeSubmission /></WithPermission></ProctorOnly>} />
+
+      {/* Live Monitor — admin needs manage_proctoring */}
+      <Route path="/monitor"      element={<ProctorOnly><WithPermission anyOf={['manage_proctoring']}><MonitorList /></WithPermission></ProctorOnly>} />
+      <Route path="/monitor/:examId" element={<ProctorOnly><WithPermission anyOf={['manage_proctoring']}><LiveMonitor /></WithPermission></ProctorOnly>} />
+
+      {/* User Management — admin needs manage_users */}
+      <Route path="/admin/users" element={<AdminOnly><WithPermission anyOf={['manage_users']}><UserManagement /></WithPermission></AdminOnly>} />
 
       {/* Student Exam Session */}
       <Route path="/exam/:examId" element={<Protected><ExamSession /></Protected>} />

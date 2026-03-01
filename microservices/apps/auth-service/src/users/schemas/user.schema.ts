@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { UserRole } from '@app/shared';
 
 export type UserDocument = HydratedDocument<User>;
@@ -21,7 +21,7 @@ export class User {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Organization', index: true })
   organizationId: Types.ObjectId;
 
-  @Prop({ type: [String], default: null })
+  @Prop({ type: MongooseSchema.Types.Mixed, default: null })
   permissions: string[] | null;
 
   createdAt: Date;

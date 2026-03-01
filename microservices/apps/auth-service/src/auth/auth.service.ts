@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -46,14 +47,20 @@ export class AuthService {
       organizationId: org.id,
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId.toString(), user.permissions);
-    await this.tokensService.saveRefreshToken(user.id, tokens.refreshToken);
+    try {
+      const tokens = await this.generateTokens(user.id, user.email, user.role, user.organizationId?.toString(), user.permissions);
+      await this.tokensService.saveRefreshToken(user.id, tokens.refreshToken);
 
-    return {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
-    };
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions ?? null },
+      };
+    } catch (err) {
+      if (err instanceof RpcException) throw err;
+      console.error('[AuthService] signup post-create error:', err);
+      throw new RpcException(new InternalServerErrorException(err?.message || 'Signup failed after user creation'));
+    }
   }
 
   async login(loginDto: LoginDto) {

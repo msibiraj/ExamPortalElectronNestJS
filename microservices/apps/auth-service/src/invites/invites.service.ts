@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   GoneException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -89,9 +90,14 @@ export class InvitesService {
       organizationId: invite.organizationId.toString(),
     });
 
-    await this.inviteModel.findByIdAndUpdate(invite._id, {
-      $set: { isUsed: true, usedAt: new Date() },
-    });
+    try {
+      await this.inviteModel.findByIdAndUpdate(invite._id, {
+        $set: { isUsed: true, usedAt: new Date() },
+      });
+    } catch (err) {
+      // User was created but invite marking failed — wrap so gateway gets a clear error
+      throw new RpcException(new InternalServerErrorException('Account created but invite marking failed: ' + (err?.message ?? err)));
+    }
 
     return {
       id: user.id,

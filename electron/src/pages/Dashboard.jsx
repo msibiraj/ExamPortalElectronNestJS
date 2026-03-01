@@ -10,6 +10,7 @@ const PROCTOR_NAV = [
     color: 'indigo',
     icon: '📝',
     action: '+ Add Question',
+    permission: 'manage_questions',
   },
   {
     label: 'Exam Papers',
@@ -18,6 +19,7 @@ const PROCTOR_NAV = [
     color: 'violet',
     icon: '📄',
     action: '+ New Paper',
+    permission: 'manage_exams',
   },
   {
     label: 'Exams',
@@ -26,6 +28,7 @@ const PROCTOR_NAV = [
     color: 'blue',
     icon: '📅',
     action: '+ Schedule Exam',
+    permission: 'manage_exams',
   },
   {
     label: 'Live Monitor',
@@ -34,6 +37,7 @@ const PROCTOR_NAV = [
     color: 'green',
     icon: '👁️',
     action: 'Open Monitor',
+    permission: 'manage_proctoring',
   },
   {
     label: 'Results',
@@ -42,6 +46,7 @@ const PROCTOR_NAV = [
     color: 'amber',
     icon: '📊',
     action: 'View Results',
+    permission: 'view_reports',
   },
 ];
 
@@ -54,6 +59,7 @@ const ADMIN_EXTRA = [
     icon: '👥',
     action: '+ Add User',
     adminOnly: true,
+    permission: 'manage_users',
   },
 ];
 
@@ -105,12 +111,18 @@ function NavCard({ item, navigate }) {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
 
   const isAdmin = user?.role === 'admin';
-  const navItems = isAdmin ? [...PROCTOR_NAV, ...ADMIN_EXTRA] : PROCTOR_NAV;
   const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : '';
+
+  // For admins: show only cards matching their permissions (null = all).
+  // For proctors: show all PROCTOR_NAV cards (fixed role access, no filtering).
+  const allItems = isAdmin ? [...PROCTOR_NAV, ...ADMIN_EXTRA] : PROCTOR_NAV;
+  const navItems = isAdmin
+    ? allItems.filter((item) => hasPermission(item.permission))
+    : PROCTOR_NAV;
 
   return (
     <div className="min-h-screen bg-gray-50">

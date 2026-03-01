@@ -50,8 +50,21 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Returns true if the current user has the given permission.
+  // Non-admins always return true (their access is governed by role, not fine-grained perms).
+  // Admins with permissions === null are unrestricted (super admin).
+  const hasPermission = (perm) => {
+    if (!user) return false;
+    if (user.role !== 'admin') return true;
+    if (user.permissions == null) return true;
+    return Array.isArray(user.permissions) && user.permissions.includes(perm);
+  };
+
+  // Returns true if the current user has at least one of the listed permissions.
+  const hasAnyPermission = (...perms) => perms.some((p) => hasPermission(p));
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, hasPermission, hasAnyPermission }}>
       {children}
     </AuthContext.Provider>
   );
