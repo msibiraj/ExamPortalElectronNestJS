@@ -54,7 +54,7 @@ export class AuthService {
       return {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions ?? null },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId?.toString(), permissions: user.permissions ?? null },
       };
     } catch (err) {
       if (err instanceof RpcException) throw err;
@@ -80,7 +80,7 @@ export class AuthService {
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId?.toString(), permissions: user.permissions },
     };
   }
 
@@ -111,7 +111,7 @@ export class AuthService {
       return {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId?.toString(), permissions: user.permissions },
       };
     } catch (error) {
       if (error instanceof RpcException) throw error;
@@ -156,7 +156,7 @@ export class AuthService {
     if (!user) {
       throw new RpcException(new UnauthorizedException('User not found'));
     }
-    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId?.toString(), permissions: user.permissions };
   }
 
   async createUser(data: {
@@ -179,7 +179,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, permissions: user.permissions };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId?.toString(), permissions: user.permissions };
   }
 
   async listUsers(organizationId: string) {
@@ -189,7 +189,7 @@ export class AuthService {
       email: u.email,
       name: u.name,
       role: u.role,
-      organizationId: u.organizationId,
+      organizationId: u.organizationId?.toString(),
       permissions: u.permissions,
       createdAt: u.createdAt,
     }));
