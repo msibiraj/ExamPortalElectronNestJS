@@ -30,7 +30,6 @@ export class AuthService {
   async signup(signupDto: SignupDto) {
     console.log('signupDto', signupDto)
     const org = await this.orgsService.findByCode(signupDto.organizationCode);
-    console.log('org', org);
     if (!org) {
       throw new RpcException(new BadRequestException('Invalid organization code'));
     }
@@ -39,16 +38,8 @@ export class AuthService {
     if (existingUser) {
       throw new RpcException(new ConflictException('Email already exists'));
     }
-
-    console.log('here')
-
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
     const hashedPassword = await bcrypt.hash(signupDto.password, saltRounds);
-    console.log('payload', {
-      ...signupDto,
-      password: hashedPassword,
-      organizationId: org.id,
-    })
     const user = await this.usersService.create({
       ...signupDto,
       password: hashedPassword,
