@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CandidateSession, CandidateSessionDocument } from './schemas/candidate-session.schema';
 import { ViolationLog, ViolationLogDocument } from './schemas/violation-log.schema';
+import { S3Service } from './s3.service';
 
 @Injectable()
 export class MonitorService {
@@ -11,6 +12,7 @@ export class MonitorService {
     private readonly sessionModel: Model<CandidateSessionDocument>,
     @InjectModel(ViolationLog.name)
     private readonly violationModel: Model<ViolationLogDocument>,
+    private readonly s3: S3Service,
   ) {}
 
   // ── SESSIONS ──────────────────────────────────────────────────────────────
@@ -92,12 +94,19 @@ export class MonitorService {
     description?: string;
     frameSnapshot?: string;
   }) {
-    const { examId, candidateId, organizationId, ...rest } = data;
+    const { examId, candidateId, organizationId, frameSnapshot, ...rest } = data;
+
+    let snapshotUrl: string | undefined;
+    if (frameSnapshot) {
+      const key = `violations/${examId}/${candidateId}/${Date.now()}.jpg`;
+      snapshotUrl = await this.s3.uploadSnapshot(frameSnapshot, key) ?? undefined;
+    }
 
     const violation = await this.violationModel.create({
       examId: new Types.ObjectId(examId),
       candidateId: new Types.ObjectId(candidateId),
       ...(organizationId ? { organizationId: new Types.ObjectId(organizationId) } : {}),
+      ...(snapshotUrl ? { snapshotUrl } : {}),
       ...rest,
     });
 

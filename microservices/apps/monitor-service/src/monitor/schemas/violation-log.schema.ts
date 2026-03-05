@@ -26,9 +26,9 @@ export class ViolationLog {
   @Prop()
   description?: string;
 
-  // Base64 JPEG frame captured at the moment of violation
+  // S3 URL of the screenshot uploaded at the moment of violation
   @Prop()
-  frameSnapshot?: string;
+  snapshotUrl?: string;
 }
 
 export const ViolationLogSchema = SchemaFactory.createForClass(ViolationLog);

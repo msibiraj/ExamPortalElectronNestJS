@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MonitorController } from './monitor.controller';
 import { MonitorService } from './monitor.service';
+import { S3Service } from './s3.service';
 import { CandidateSession, CandidateSessionSchema } from './schemas/candidate-session.schema';
 import { ViolationLog, ViolationLogSchema } from './schemas/violation-log.schema';
 
@@ -13,6 +14,6 @@ import { ViolationLog, ViolationLogSchema } from './schemas/violation-log.schema
     ]),
   ],
   controllers: [MonitorController],
-  providers: [MonitorService],
+  providers: [MonitorService, S3Service],
 })
 export class MonitorModule {}

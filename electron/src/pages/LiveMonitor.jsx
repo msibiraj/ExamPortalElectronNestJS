@@ -307,11 +307,11 @@ function CandidateDrawer({ session, stream, violations, socket, examId, onClose,
                   <p className="mt-1 text-gray-400">{new Date(v.createdAt).toLocaleTimeString()}</p>
 
                   {/* Snapshot photo */}
-                  {v.frameSnapshot && (
+                  {v.snapshotUrl && (
                     <img
-                      src={v.frameSnapshot}
+                      src={v.snapshotUrl}
                       alt="snapshot"
-                      onClick={() => window.open(v.frameSnapshot, '_blank')}
+                      onClick={() => window.open(v.snapshotUrl, '_blank')}
                       className="mt-2 w-full rounded border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                       title="Click to view full size"
                     />

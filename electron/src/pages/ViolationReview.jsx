@@ -42,7 +42,7 @@ export default function ViolationReview() {
   const [violations, setViolations] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [filter, setFilter]         = useState('all');   // 'all' | 'photos' | 'high'
-  const [lightbox, setLightbox]     = useState(null);    // base64 frameSnapshot
+  const [lightbox, setLightbox]     = useState(null);    // S3 snapshotUrl
 
   useEffect(() => {
     api.get(`/monitor/${examId}/violations/${studentId}`)
@@ -51,11 +51,11 @@ export default function ViolationReview() {
       .finally(() => setLoading(false));
   }, [examId, studentId]);
 
-  const photoCount = violations.filter((v) => v.frameSnapshot).length;
+  const photoCount = violations.filter((v) => v.snapshotUrl).length;
   const highCount  = violations.filter((v) => v.severity === 'high').length;
 
   const filtered = violations.filter((v) => {
-    if (filter === 'photos') return !!v.frameSnapshot;
+    if (filter === 'photos') return !!v.snapshotUrl;
     if (filter === 'high')   return v.severity === 'high';
     return true;
   });
@@ -144,10 +144,10 @@ export default function ViolationReview() {
                     <div key={v._id} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                       <div
                         className="relative group cursor-pointer"
-                        onClick={() => setLightbox(v.frameSnapshot)}
+                        onClick={() => setLightbox(v.snapshotUrl)}
                       >
                         <img
-                          src={v.frameSnapshot}
+                          src={v.snapshotUrl}
                           alt={v.type}
                           className="w-full object-cover aspect-video"
                         />
@@ -185,11 +185,11 @@ export default function ViolationReview() {
                       <div className="flex items-start gap-4 p-4">
 
                         {/* Thumbnail */}
-                        {v.frameSnapshot && (
+                        {v.snapshotUrl && (
                           <img
-                            src={v.frameSnapshot}
+                            src={v.snapshotUrl}
                             alt="snapshot"
-                            onClick={() => setLightbox(v.frameSnapshot)}
+                            onClick={() => setLightbox(v.snapshotUrl)}
                             className="w-28 h-16 object-cover rounded-lg border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                           />
                         )}
@@ -212,9 +212,9 @@ export default function ViolationReview() {
                           </p>
                         </div>
 
-                        {v.frameSnapshot && (
+                        {v.snapshotUrl && (
                           <button
-                            onClick={() => setLightbox(v.frameSnapshot)}
+                            onClick={() => setLightbox(v.snapshotUrl)}
                             className="text-xs text-indigo-600 hover:text-indigo-800 flex-shrink-0"
                           >
                             View photo
@@ -250,11 +250,12 @@ export default function ViolationReview() {
           </button>
           <a
             href={lightbox}
-            download="violation-snapshot.jpg"
+            target="_blank"
+            rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-5 right-5 text-xs text-white bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg"
           >
-            Download
+            Open full size
           </a>
         </div>
       )}
