@@ -54,6 +54,10 @@ export class CandidateSession {
   // Socket ID of the connected candidate
   @Prop()
   socketId?: string;
+
+  // S3 public URLs for recorded webcam chunks (ordered by upload sequence)
+  @Prop({ type: [String], default: [] })
+  recordingChunks: string[];
 }
 
 export const CandidateSessionSchema = SchemaFactory.createForClass(CandidateSession);

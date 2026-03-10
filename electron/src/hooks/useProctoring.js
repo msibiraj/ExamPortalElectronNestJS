@@ -23,6 +23,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import * as blazeface from '@tensorflow-models/blazeface';
 import api from '../api/axios';
 
 // ─── Timing constants ──────────────────────────────────────────────────────
@@ -31,6 +32,8 @@ const OBJECT_SCAN_INTERVAL_MS = 10_000;  // run COCO-SSD every 10 s
 const AUDIO_CHECK_INTERVAL_MS = 3_000;   // audio level check every 3 s
 const IPC_CHECK_INTERVAL_MS   = 10_000;  // DevTools heartbeat every 10 s
 const THROTTLE_MS             = 15_000;  // same type: max 1 report per 15 s
+const RETRY_INTERVAL_MS       = 30_000;  // retry queued violations every 30 s
+const QUEUE_MAX_SIZE          = 100;     // cap queue to prevent unbounded growth
 const AUDIO_NOISE_THRESHOLD   = 20;      // 0-255 RMS; above = noise detected
 const PASTE_BURST_CHARS       = 15;      // chars added in one event = paste
 const STATIC_FRAME_THRESHOLD  = 3;       // consecutive identical frames = fake
@@ -54,6 +57,25 @@ async function loadCocoModel() {
   return cocoModel;
 }
 
+// ─── BlazeFace model (module-level cache, fallback for non-Chromium) ─────
+let blazefaceModel   = null;
+let blazefaceLoading = false;
+
+async function loadBlazefaceModel() {
+  if (blazefaceModel)   return blazefaceModel;
+  if (blazefaceLoading) return null;
+  blazefaceLoading = true;
+  try {
+    await tf.ready();
+    blazefaceModel = await blazeface.load();
+  } catch {
+    blazefaceModel = null;
+  } finally {
+    blazefaceLoading = false;
+  }
+  return blazefaceModel;
+}
+
 // ─── Built-in FaceDetector availability check ────────────────────────────
 const FACE_DETECTOR_SUPPORTED =
   typeof window !== 'undefined' && 'FaceDetector' in window;
@@ -67,13 +89,15 @@ export function useProctoring({
   candidateName,
   enabled = true,
 }) {
-  const videoRef         = useRef(null);   // hidden <video> for frame capture
-  const lastReported     = useRef({});     // type → last report timestamp
-  const lastFrameHash    = useRef(null);   // for static-frame detection
-  const staticCount      = useRef(0);      // consecutive identical frames
-  const audioAnalyserRef = useRef(null);   // Web Audio AnalyserNode
-  const audioStreamRef   = useRef(null);   // separate mic stream for audio
-  const lastCharCount    = useRef(0);      // for paste-burst detection
+  const videoRef          = useRef(null);   // hidden <video> for frame capture
+  const lastReported      = useRef({});     // type → last report timestamp
+  const lastFrameHash     = useRef(null);   // for static-frame detection
+  const staticCount       = useRef(0);      // consecutive identical frames
+  const audioAnalyserRef  = useRef(null);   // Web Audio AnalyserNode
+  const audioStreamRef    = useRef(null);   // separate mic stream for audio
+  const audioContextRef   = useRef(null);   // AudioContext (closed on cleanup)
+  const lastCharCount     = useRef(0);      // for paste-burst detection
+  const violationQueueRef = useRef([]);     // failed violations pending retry
 
   // ── Hidden video element that mirrors the webcam stream ────────────────
   useEffect(() => {
@@ -149,21 +173,47 @@ export function useProctoring({
       lastReported.current[type] = now;
 
       const frameSnapshot = withSnapshot ? captureFrame() : undefined;
+      const payload = {
+        candidateId,
+        candidateName,
+        type,
+        severity,
+        description,
+        ...(frameSnapshot ? { frameSnapshot } : {}),
+      };
       try {
-        await api.post(`/monitor/${examId}/violation`, {
-          candidateId,
-          candidateName,
-          type,
-          severity,
-          description,
-          ...(frameSnapshot ? { frameSnapshot } : {}),
-        });
+        await api.post(`/monitor/${examId}/violation`, payload);
       } catch {
-        // Silently ignore — exam must not be interrupted by network errors
+        // Network error — queue for retry so violations are not lost
+        if (violationQueueRef.current.length < QUEUE_MAX_SIZE) {
+          violationQueueRef.current.push(payload);
+        }
       }
     },
     [enabled, examId, candidateId, candidateName, captureFrame],
   );
+
+  // ── Retry queue: flush failed violations every 30 s ───────────────────
+  useEffect(() => {
+    if (!enabled) return;
+    const id = setInterval(async () => {
+      if (violationQueueRef.current.length === 0) return;
+      const batch  = violationQueueRef.current.splice(0);   // drain atomically
+      const failed = [];
+      for (const payload of batch) {
+        try {
+          await api.post(`/monitor/${examId}/violation`, payload);
+        } catch {
+          failed.push(payload);
+        }
+      }
+      if (failed.length > 0) {
+        const room = QUEUE_MAX_SIZE - violationQueueRef.current.length;
+        violationQueueRef.current.unshift(...failed.slice(0, room));
+      }
+    }, RETRY_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [enabled, examId]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // LAYER 1 — Browser events
@@ -372,47 +422,79 @@ export function useProctoring({
         });
       }
 
-      // ── Built-in FaceDetector API ────────────────────────────────────
-      if (FACE_DETECTOR_SUPPORTED && videoRef.current?.videoWidth > 0) {
-        try {
-          const detector  = new window.FaceDetector({ fastMode: true });
-          const faces     = await detector.detect(videoRef.current);
+      // ── FaceDetector API (Chromium) or BlazeFace fallback (Firefox/Safari)
+      if (videoRef.current?.videoWidth > 0) {
+        if (FACE_DETECTOR_SUPPORTED) {
+          try {
+            const detector = new window.FaceDetector({ fastMode: true });
+            const faces    = await detector.detect(videoRef.current);
 
-          if (faces.length === 0) {
-            report({
-              type: 'face-not-visible', severity: 'high',
-              description: 'No face detected by FaceDetector API',
-            });
-          } else if (faces.length > 1) {
-            report({
-              type: 'multiple-faces', severity: 'high',
-              description: `${faces.length} faces detected — possible assistance from another person`,
-            });
-          } else if (faces.length === 1) {
-            // Head pose from bounding box position in frame
-            const box      = faces[0].boundingBox;
-            const centerX  = box.x + box.width  / 2;
-            const centerY  = box.y + box.height / 2;
-            const frameW   = videoRef.current.videoWidth;
-            const frameH   = videoRef.current.videoHeight;
-
-            const xRatio = centerX / frameW;
-            const yRatio = centerY / frameH;
-
-            if (yRatio > 0.70) {
+            if (faces.length === 0) {
               report({
-                type: 'looking-down', severity: 'medium',
-                description: 'Student appears to be looking down — possible phone or notes use',
+                type: 'face-not-visible', severity: 'high',
+                description: 'No face detected by FaceDetector API',
               });
-            } else if (xRatio < 0.25 || xRatio > 0.75) {
+            } else if (faces.length > 1) {
               report({
-                type: 'looking-sideways', severity: 'medium',
-                description: 'Student appears to be looking sideways — possible use of another screen',
+                type: 'multiple-faces', severity: 'high',
+                description: `${faces.length} faces detected — possible assistance from another person`,
               });
+            } else {
+              const box    = faces[0].boundingBox;
+              const xRatio = (box.x + box.width  / 2) / videoRef.current.videoWidth;
+              const yRatio = (box.y + box.height / 2) / videoRef.current.videoHeight;
+              if (yRatio > 0.70) {
+                report({
+                  type: 'looking-down', severity: 'medium',
+                  description: 'Student appears to be looking down — possible phone or notes use',
+                });
+              } else if (xRatio < 0.25 || xRatio > 0.75) {
+                report({
+                  type: 'looking-sideways', severity: 'medium',
+                  description: 'Student appears to be looking sideways — possible use of another screen',
+                });
+              }
+            }
+          } catch {
+            // FaceDetector error — skip
+          }
+        } else {
+          // BlazeFace fallback — works in Firefox, Safari, and any non-Chromium browser
+          const model = await loadBlazefaceModel();
+          if (model) {
+            try {
+              const faces = await model.estimateFaces(videoRef.current, /* returnTensors */ false);
+              if (faces.length === 0) {
+                report({
+                  type: 'face-not-visible', severity: 'high',
+                  description: 'No face detected (BlazeFace) — student may have moved away',
+                });
+              } else if (faces.length > 1) {
+                report({
+                  type: 'multiple-faces', severity: 'high',
+                  description: `${faces.length} faces detected (BlazeFace) — possible assistance from another person`,
+                });
+              } else {
+                const [x0, y0] = faces[0].topLeft;
+                const [x1, y1] = faces[0].bottomRight;
+                const xRatio   = ((x0 + x1) / 2) / videoRef.current.videoWidth;
+                const yRatio   = ((y0 + y1) / 2) / videoRef.current.videoHeight;
+                if (yRatio > 0.70) {
+                  report({
+                    type: 'looking-down', severity: 'medium',
+                    description: 'Student appears to be looking down — possible phone or notes use',
+                  });
+                } else if (xRatio < 0.25 || xRatio > 0.75) {
+                  report({
+                    type: 'looking-sideways', severity: 'medium',
+                    description: 'Student appears to be looking sideways — possible use of another screen',
+                  });
+                }
+              }
+            } catch {
+              // BlazeFace error — skip
             }
           }
-        } catch {
-          // FaceDetector error — skip
         }
       }
 
@@ -448,34 +530,43 @@ export function useProctoring({
       try {
         const predictions = await model.detect(video);
 
-        const classes = predictions.map((p) => p.class.toLowerCase());
+        const pct = (p) => `${Math.round(p.score * 100)}%`;
 
-        if (classes.includes('cell phone') || classes.includes('remote')) {
+        const phoneHit = predictions.find((p) =>
+          ['cell phone', 'remote'].includes(p.class.toLowerCase()));
+        if (phoneHit) {
           report({
             type: 'phone-detected', severity: 'high',
-            description: 'Mobile phone detected in camera — possible cheating with phone',
+            description: `Mobile phone detected — possible cheating with phone (confidence: ${pct(phoneHit)})`,
           });
         }
 
-        if (classes.includes('book') || classes.includes('notebook')) {
+        const notesHit = predictions.find((p) =>
+          ['book', 'notebook'].includes(p.class.toLowerCase()));
+        if (notesHit) {
           report({
             type: 'notes-detected', severity: 'high',
-            description: 'Book or notebook detected — possible use of reference material',
+            description: `Book or notebook detected — possible use of reference material (confidence: ${pct(notesHit)})`,
           });
         }
 
-        if (classes.includes('laptop') || classes.includes('tv') || classes.includes('monitor')) {
+        const screenHit = predictions.find((p) =>
+          ['laptop', 'tv', 'monitor'].includes(p.class.toLowerCase()));
+        if (screenHit) {
           report({
             type: 'second-device', severity: 'high',
-            description: 'Additional screen/device detected in camera',
+            description: `Additional screen/device detected in camera (confidence: ${pct(screenHit)})`,
           });
         }
 
-        const personCount = classes.filter((c) => c === 'person').length;
-        if (personCount > 1) {
+        const persons = predictions.filter((p) => p.class.toLowerCase() === 'person');
+        if (persons.length > 1) {
+          const avgPct = Math.round(
+            persons.reduce((s, p) => s + p.score, 0) / persons.length * 100,
+          );
           report({
             type: 'multiple-persons', severity: 'high',
-            description: `${personCount} people detected — possible impersonation or assistance`,
+            description: `${persons.length} people detected — possible impersonation or assistance (avg confidence: ${avgPct}%)`,
           });
         }
       } catch {
@@ -503,6 +594,7 @@ export function useProctoring({
         audioStreamRef.current = stream;
 
         const ctx      = new AudioContext();
+        audioContextRef.current = ctx;
         const source   = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
@@ -534,8 +626,10 @@ export function useProctoring({
       cancelled = true;
       clearInterval(intervalId);
       audioStreamRef.current?.getTracks().forEach((t) => t.stop());
+      audioContextRef.current?.close();
       audioStreamRef.current   = null;
       audioAnalyserRef.current = null;
+      audioContextRef.current  = null;
     };
   }, [enabled, report]);
 

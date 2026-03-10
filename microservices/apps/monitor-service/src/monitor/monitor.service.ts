@@ -197,4 +197,31 @@ export class MonitorService {
       description: 'Formal warning issued by proctor',
     });
   }
+
+  // ── RECORDING ─────────────────────────────────────────────────────────────
+
+  async getRecordingUploadUrl(examId: string, candidateId: string, chunkIndex: number) {
+    const key = `recordings/${examId}/${candidateId}/chunk-${String(chunkIndex).padStart(5, '0')}-${Date.now()}.webm`;
+    return this.s3.getPresignedUploadUrl(key);
+  }
+
+  async saveRecordingChunk(examId: string, candidateId: string, publicUrl: string) {
+    await this.sessionModel.findOneAndUpdate(
+      {
+        examId: new Types.ObjectId(examId),
+        candidateId: new Types.ObjectId(candidateId),
+      },
+      { $push: { recordingChunks: publicUrl } },
+    );
+  }
+
+  async getRecordingChunks(examId: string, candidateId: string): Promise<string[]> {
+    const session = await this.sessionModel
+      .findOne(
+        { examId: new Types.ObjectId(examId), candidateId: new Types.ObjectId(candidateId) },
+        { recordingChunks: 1 },
+      )
+      .lean();
+    return session?.recordingChunks ?? [];
+  }
 }

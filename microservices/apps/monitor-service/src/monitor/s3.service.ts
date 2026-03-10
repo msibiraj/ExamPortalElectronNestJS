@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class S3Service {
@@ -53,6 +54,34 @@ export class S3Service {
       return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
     } catch (err) {
       this.logger.warn(`S3 upload failed for key ${key}: ${err?.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a presigned PUT URL so the client can upload directly to S3.
+   * @param key          S3 object key
+   * @param contentType  MIME type of the upload (default: video/webm)
+   * @param expiresIn    URL TTL in seconds (default: 3600)
+   * @returns            { uploadUrl, publicUrl } or null if S3 disabled / error
+   */
+  async getPresignedUploadUrl(
+    key: string,
+    contentType = 'video/webm',
+    expiresIn = 3600,
+  ): Promise<{ uploadUrl: string; publicUrl: string } | null> {
+    if (!this.enabled) return null;
+    try {
+      const command = new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: contentType,
+      });
+      const uploadUrl = await getSignedUrl(this.client, command, { expiresIn });
+      const publicUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+      return { uploadUrl, publicUrl };
+    } catch (err) {
+      this.logger.warn(`Failed to generate presigned URL for key ${key}: ${err?.message}`);
       return null;
     }
   }

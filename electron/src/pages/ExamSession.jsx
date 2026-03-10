@@ -6,6 +6,7 @@ import { io } from 'socket.io-client';
 import ConfluenceEditor from '../components/ConfluenceEditor';
 import { useAuth } from '../context/AuthContext';
 import { useProctoring } from '../hooks/useProctoring';
+import { useRecording } from '../hooks/useRecording';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/?$/, '/');
 const WS_URL = `${API.replace(/\/$/, '')}/monitor`;
@@ -906,6 +907,12 @@ export default function ExamSession() {
     candidateId:   authUser?.id || authUser?._id || '',
     candidateName: authUser?.name || 'Student',
     enabled:       !!exam && !submitted,
+  });
+
+  useRecording({
+    examId,
+    candidateId: authUser?.id || authUser?._id || '',
+    enabled:     !!exam && !submitted,
   });
 
   // ── Timer ──

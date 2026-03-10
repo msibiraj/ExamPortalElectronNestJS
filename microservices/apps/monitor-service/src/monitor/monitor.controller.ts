@@ -56,4 +56,19 @@ export class MonitorController {
   logWarning(@Payload() payload: { examId: string; candidateId: string; candidateName: string; organizationId: string }) {
     return this.monitorService.logWarning(payload.examId, payload.candidateId, payload.candidateName, payload.organizationId);
   }
+
+  @MessagePattern(MONITOR_PATTERNS.RECORDING_GET_UPLOAD_URL)
+  getRecordingUploadUrl(@Payload() payload: { examId: string; candidateId: string; chunkIndex: number }) {
+    return this.monitorService.getRecordingUploadUrl(payload.examId, payload.candidateId, payload.chunkIndex);
+  }
+
+  @MessagePattern(MONITOR_PATTERNS.RECORDING_SAVE_CHUNK)
+  saveRecordingChunk(@Payload() payload: { examId: string; candidateId: string; publicUrl: string }) {
+    return this.monitorService.saveRecordingChunk(payload.examId, payload.candidateId, payload.publicUrl);
+  }
+
+  @MessagePattern(MONITOR_PATTERNS.RECORDING_GET_CHUNKS)
+  getRecordingChunks(@Payload() payload: { examId: string; candidateId: string }) {
+    return this.monitorService.getRecordingChunks(payload.examId, payload.candidateId);
+  }
 }

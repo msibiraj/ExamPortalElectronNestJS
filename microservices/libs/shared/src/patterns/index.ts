@@ -75,6 +75,9 @@ export const MONITOR_PATTERNS = {
   EXTEND_TIME: 'monitor.extend_time',
   TERMINATE: 'monitor.terminate',
   LOG_WARNING: 'monitor.log_warning',
+  RECORDING_GET_UPLOAD_URL: 'monitor.recording.get_upload_url',
+  RECORDING_SAVE_CHUNK: 'monitor.recording.save_chunk',
+  RECORDING_GET_CHUNKS: 'monitor.recording.get_chunks',
 };
 
 export const WS_EVENTS = {

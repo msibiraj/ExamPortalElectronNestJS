@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -31,25 +31,94 @@ const SEVERITY_STYLE = {
   low:    { badge: 'bg-gray-100 text-gray-600',   border: 'border-gray-200'  },
 };
 
+const CHUNK_DURATION_S = 30; // must match CHUNK_INTERVAL_MS / 1000 in useRecording.js
+
 function getMeta(type) {
   return REASON_META[type] || { label: type, color: 'bg-gray-100 text-gray-600' };
+}
+
+function formatOffset(totalSeconds) {
+  const s = Math.floor(totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${m}:${String(sec).padStart(2, '0')}`;
 }
 
 export default function ViolationReview() {
   const { examId, studentId } = useParams();
   const navigate = useNavigate();
 
-  const [violations, setViolations] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [filter, setFilter]         = useState('all');   // 'all' | 'photos' | 'high'
-  const [lightbox, setLightbox]     = useState(null);    // S3 snapshotUrl
+  const [violations, setViolations]       = useState([]);
+  const [recordings, setRecordings]       = useState([]);   // ordered chunk URLs
+  const [startedAt, setStartedAt]         = useState(null); // ISO string from session
+  const [loading, setLoading]             = useState(true);
+  const [filter, setFilter]               = useState('all');
+  const [activeTab, setActiveTab]         = useState('violations'); // 'violations' | 'recording'
+  const [lightbox, setLightbox]           = useState(null);
+  const [currentChunk, setCurrentChunk]   = useState(0);
+  const [pendingSeek, setPendingSeek]     = useState(null); // seconds within current chunk
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0); // live time within active chunk
+
+  const videoRef = useRef(null);
 
   useEffect(() => {
-    api.get(`/monitor/${examId}/violations/${studentId}`)
-      .then((r) => setViolations(r.data))
+    Promise.all([
+      api.get(`/monitor/${examId}/violations/${studentId}`),
+      api.get(`/monitor/${examId}/recordings/${studentId}`),
+      api.get(`/monitor/${examId}/sessions`),
+    ])
+      .then(([vRes, rRes, sRes]) => {
+        setViolations(vRes.data);
+        setRecordings(rRes.data ?? []);
+        const session = (sRes.data ?? []).find(
+          (s) => String(s.candidateId) === String(studentId),
+        );
+        if (session?.startedAt) setStartedAt(session.startedAt);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [examId, studentId]);
+
+  // Apply pending seek after the video's src changes and metadata loads
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || pendingSeek === null) return;
+    const onLoaded = () => {
+      video.currentTime = pendingSeek;
+      setPendingSeek(null);
+      video.play().catch(() => {});
+    };
+    video.addEventListener('loadedmetadata', onLoaded, { once: true });
+    return () => video.removeEventListener('loadedmetadata', onLoaded);
+  }, [currentChunk, pendingSeek]);
+
+  // Seek to the recording moment when a violation is clicked
+  const seekToViolation = useCallback(
+    (violation) => {
+      if (!startedAt || recordings.length === 0) return;
+      const offsetSeconds = (new Date(violation.createdAt) - new Date(startedAt)) / 1000;
+      if (offsetSeconds < 0) return;
+      const chunkIndex    = Math.min(
+        Math.floor(offsetSeconds / CHUNK_DURATION_S),
+        recordings.length - 1,
+      );
+      const seekWithin    = offsetSeconds - chunkIndex * CHUNK_DURATION_S;
+
+      setActiveTab('recording');
+
+      if (chunkIndex === currentChunk && videoRef.current) {
+        videoRef.current.currentTime = seekWithin;
+        videoRef.current.play().catch(() => {});
+      } else {
+        setCurrentChunk(chunkIndex);
+        setPendingSeek(seekWithin);
+      }
+    },
+    [startedAt, recordings, currentChunk],
+  );
 
   const photoCount = violations.filter((v) => v.snapshotUrl).length;
   const highCount  = violations.filter((v) => v.severity === 'high').length;
@@ -59,6 +128,14 @@ export default function ViolationReview() {
     if (filter === 'high')   return v.severity === 'high';
     return true;
   });
+
+  // Violations with a computable recording offset (for seek buttons)
+  const violationsWithOffset = violations.map((v) => ({
+    ...v,
+    offsetSeconds: startedAt
+      ? (new Date(v.createdAt) - new Date(startedAt)) / 1000
+      : null,
+  }));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,52 +153,29 @@ export default function ViolationReview() {
         <span className="text-xs text-gray-400">
           {violations.length} violation{violations.length !== 1 ? 's' : ''}
           {photoCount > 0 && ` · ${photoCount} with photos`}
+          {recordings.length > 0 && ` · ${recordings.length} recording chunk${recordings.length !== 1 ? 's' : ''}`}
         </span>
       </nav>
 
       <div className="max-w-5xl mx-auto px-6 py-8">
 
         {loading && (
-          <p className="text-center text-sm text-gray-400 py-16">Loading violations…</p>
+          <p className="text-center text-sm text-gray-400 py-16">Loading…</p>
         )}
 
-        {!loading && violations.length === 0 && (
-          <div className="text-center py-20 text-gray-400">
-            <p className="text-5xl mb-4">✅</p>
-            <p className="text-sm font-medium">No violations recorded for this student.</p>
-          </div>
-        )}
-
-        {!loading && violations.length > 0 && (
+        {!loading && (
           <>
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-gray-900">{violations.length}</div>
-                <div className="text-xs text-gray-500 mt-1">Total</div>
-              </div>
-              <div className="rounded-xl bg-white border border-red-200 p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-red-600">{highCount}</div>
-                <div className="text-xs text-gray-500 mt-1">High Severity</div>
-              </div>
-              <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-indigo-600">{photoCount}</div>
-                <div className="text-xs text-gray-500 mt-1">With Snapshots</div>
-              </div>
-            </div>
-
-            {/* Filter tabs */}
+            {/* Top-level tabs: Violations / Recording */}
             <div className="flex gap-1 mb-6 border-b border-gray-200">
               {[
-                ['all',    `All (${violations.length})`],
-                ['photos', `Snapshots (${photoCount})`],
-                ['high',   `High Severity (${highCount})`],
+                ['violations', `Violations (${violations.length})`],
+                ['recording',  `Recording (${recordings.length} chunk${recordings.length !== 1 ? 's' : ''})`],
               ].map(([key, label]) => (
                 <button
                   key={key}
-                  onClick={() => setFilter(key)}
+                  onClick={() => setActiveTab(key)}
                   className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    filter === key
+                    activeTab === key
                       ? 'border-indigo-600 text-indigo-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -131,99 +185,274 @@ export default function ViolationReview() {
               ))}
             </div>
 
-            {filtered.length === 0 && (
-              <p className="text-center text-sm text-gray-400 py-12">No violations match this filter.</p>
+            {/* ── VIOLATIONS TAB ── */}
+            {activeTab === 'violations' && (
+              <>
+                {violations.length === 0 && (
+                  <div className="text-center py-20 text-gray-400">
+                    <p className="text-5xl mb-4">✅</p>
+                    <p className="text-sm font-medium">No violations recorded for this student.</p>
+                  </div>
+                )}
+
+                {violations.length > 0 && (
+                  <>
+                    {/* Summary */}
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-gray-900">{violations.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Total</div>
+                      </div>
+                      <div className="rounded-xl bg-white border border-red-200 p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-red-600">{highCount}</div>
+                        <div className="text-xs text-gray-500 mt-1">High Severity</div>
+                      </div>
+                      <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-indigo-600">{photoCount}</div>
+                        <div className="text-xs text-gray-500 mt-1">With Snapshots</div>
+                      </div>
+                    </div>
+
+                    {/* Filter tabs */}
+                    <div className="flex gap-1 mb-6 border-b border-gray-200">
+                      {[
+                        ['all',    `All (${violations.length})`],
+                        ['photos', `Snapshots (${photoCount})`],
+                        ['high',   `High Severity (${highCount})`],
+                      ].map(([key, label]) => (
+                        <button
+                          key={key}
+                          onClick={() => setFilter(key)}
+                          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                            filter === key
+                              ? 'border-indigo-600 text-indigo-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {filtered.length === 0 && (
+                      <p className="text-center text-sm text-gray-400 py-12">No violations match this filter.</p>
+                    )}
+
+                    {/* Photo grid */}
+                    {filter === 'photos' && filtered.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+                        {filtered.map((v) => {
+                          const meta = getMeta(v.type);
+                          return (
+                            <div key={v._id} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                              <div
+                                className="relative group cursor-pointer"
+                                onClick={() => setLightbox(v.snapshotUrl)}
+                              >
+                                <img
+                                  src={v.snapshotUrl}
+                                  alt={v.type}
+                                  className="w-full object-cover aspect-video"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                                  <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 bg-black/50 px-2 py-1 rounded">
+                                    View full size
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="px-3 py-2">
+                                <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${meta.color}`}>
+                                  {meta.label}
+                                </span>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {new Date(v.createdAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Violations list */}
+                    {filter !== 'photos' && (
+                      <div className="space-y-2">
+                        {filtered.map((v) => {
+                          const meta       = getMeta(v.type);
+                          const sevStyle   = SEVERITY_STYLE[v.severity] || SEVERITY_STYLE.low;
+                          const withOffset = violationsWithOffset.find((w) => w._id === v._id);
+                          const canSeek    = recordings.length > 0 && withOffset?.offsetSeconds != null && withOffset.offsetSeconds >= 0;
+                          return (
+                            <div
+                              key={v._id}
+                              className={`rounded-xl border bg-white overflow-hidden shadow-sm ${sevStyle.border}`}
+                            >
+                              <div className="flex items-start gap-4 p-4">
+
+                                {/* Thumbnail */}
+                                {v.snapshotUrl && (
+                                  <img
+                                    src={v.snapshotUrl}
+                                    alt="snapshot"
+                                    onClick={() => setLightbox(v.snapshotUrl)}
+                                    className="w-28 h-16 object-cover rounded-lg border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                  />
+                                )}
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${meta.color}`}>
+                                      {meta.label}
+                                    </span>
+                                    <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${sevStyle.badge}`}>
+                                      {v.severity}
+                                    </span>
+                                    {canSeek && (
+                                      <span className="text-xs text-gray-400 font-mono">
+                                        @ {formatOffset(withOffset.offsetSeconds)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {v.description && (
+                                    <p className="text-xs text-gray-500 mt-1">{v.description}</p>
+                                  )}
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {new Date(v.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {canSeek && (
+                                    <button
+                                      onClick={() => seekToViolation(v)}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg transition-colors"
+                                      title="Jump to this moment in the recording"
+                                    >
+                                      ▶ Jump to
+                                    </button>
+                                  )}
+                                  {v.snapshotUrl && (
+                                    <button
+                                      onClick={() => setLightbox(v.snapshotUrl)}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800"
+                                    >
+                                      View photo
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
 
-            {/* Photo grid (Snapshots tab) */}
-            {filter === 'photos' && filtered.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
-                {filtered.map((v) => {
-                  const meta = getMeta(v.type);
-                  return (
-                    <div key={v._id} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                      <div
-                        className="relative group cursor-pointer"
-                        onClick={() => setLightbox(v.snapshotUrl)}
-                      >
-                        <img
-                          src={v.snapshotUrl}
-                          alt={v.type}
-                          className="w-full object-cover aspect-video"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
-                          <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 bg-black/50 px-2 py-1 rounded">
-                            View full size
+            {/* ── RECORDING TAB ── */}
+            {activeTab === 'recording' && (
+              <div className="flex gap-6">
+
+                {/* Video player */}
+                <div className="flex-1 min-w-0">
+                  {recordings.length === 0 ? (
+                    <div className="flex items-center justify-center h-64 rounded-xl border-2 border-dashed border-gray-200 bg-white text-center text-sm text-gray-400">
+                      No recording available for this student.
+                    </div>
+                  ) : (
+                    <>
+                      <video
+                        ref={videoRef}
+                        key={recordings[currentChunk]}   // re-mount when chunk changes
+                        src={recordings[currentChunk]}
+                        controls
+                        autoPlay={pendingSeek !== null}
+                        onEnded={() => {
+                          if (currentChunk < recordings.length - 1) {
+                            setCurrentChunk((c) => c + 1);
+                          }
+                        }}
+                        className="w-full rounded-xl bg-black shadow"
+                      />
+
+                      {/* Chunk navigation */}
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          disabled={currentChunk === 0}
+                          onClick={() => setCurrentChunk((c) => c - 1)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
+                        >
+                          ← Prev
+                        </button>
+                        <span className="text-xs text-gray-500 flex-1 text-center">
+                          Chunk {currentChunk + 1} of {recordings.length}
+                          <span className="text-gray-400 ml-1">
+                            ({formatOffset(currentChunk * CHUNK_DURATION_S)}
+                            {' – '}
+                            {formatOffset((currentChunk + 1) * CHUNK_DURATION_S)})
                           </span>
-                        </div>
-                      </div>
-                      <div className="px-3 py-2">
-                        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${meta.color}`}>
-                          {meta.label}
                         </span>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(v.createdAt).toLocaleString()}
-                        </p>
+                        <button
+                          disabled={currentChunk === recordings.length - 1}
+                          onClick={() => setCurrentChunk((c) => c + 1)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
+                        >
+                          Next →
+                        </button>
                       </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Violation timeline */}
+                <div className="w-64 flex-shrink-0">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    Violation Timeline
+                  </p>
+                  {violationsWithOffset.length === 0 ? (
+                    <p className="text-xs text-gray-400">No violations.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-[480px] overflow-y-auto pr-1">
+                      {violationsWithOffset
+                        .filter((v) => v.offsetSeconds != null && v.offsetSeconds >= 0)
+                        .sort((a, b) => a.offsetSeconds - b.offsetSeconds)
+                        .map((v) => {
+                          const meta     = getMeta(v.type);
+                          const sevStyle = SEVERITY_STYLE[v.severity] || SEVERITY_STYLE.low;
+                          const chunkForV = Math.floor(v.offsetSeconds / CHUNK_DURATION_S);
+                          const isInCurrentChunk = chunkForV === currentChunk;
+                          return (
+                            <button
+                              key={v._id}
+                              onClick={() => seekToViolation(v)}
+                              disabled={recordings.length === 0}
+                              className={`w-full text-left rounded-lg border p-2 transition-colors text-xs
+                                ${isInCurrentChunk
+                                  ? 'border-indigo-300 bg-indigo-50'
+                                  : 'border-gray-100 bg-white hover:bg-gray-50'
+                                }
+                                disabled:opacity-40 disabled:cursor-not-allowed`}
+                            >
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <span className={`rounded-full px-1.5 py-0.5 font-medium text-[10px] ${meta.color}`}>
+                                  {meta.label}
+                                </span>
+                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${sevStyle.badge}`}>
+                                  {v.severity}
+                                </span>
+                              </div>
+                              <div className="text-gray-500 font-mono mt-0.5">
+                                {formatOffset(v.offsetSeconds)}
+                              </div>
+                            </button>
+                          );
+                        })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Violations list */}
-            {filter !== 'photos' && (
-              <div className="space-y-2">
-                {filtered.map((v) => {
-                  const meta     = getMeta(v.type);
-                  const sevStyle = SEVERITY_STYLE[v.severity] || SEVERITY_STYLE.low;
-                  return (
-                    <div
-                      key={v._id}
-                      className={`rounded-xl border bg-white overflow-hidden shadow-sm ${sevStyle.border}`}
-                    >
-                      <div className="flex items-start gap-4 p-4">
-
-                        {/* Thumbnail */}
-                        {v.snapshotUrl && (
-                          <img
-                            src={v.snapshotUrl}
-                            alt="snapshot"
-                            onClick={() => setLightbox(v.snapshotUrl)}
-                            className="w-28 h-16 object-cover rounded-lg border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                          />
-                        )}
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${meta.color}`}>
-                              {meta.label}
-                            </span>
-                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${sevStyle.badge}`}>
-                              {v.severity}
-                            </span>
-                          </div>
-                          {v.description && (
-                            <p className="text-xs text-gray-500 mt-1">{v.description}</p>
-                          )}
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(v.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-
-                        {v.snapshotUrl && (
-                          <button
-                            onClick={() => setLightbox(v.snapshotUrl)}
-                            className="text-xs text-indigo-600 hover:text-indigo-800 flex-shrink-0"
-                          >
-                            View photo
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
             )}
           </>

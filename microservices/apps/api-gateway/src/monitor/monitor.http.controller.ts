@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -100,6 +100,54 @@ export class MonitorHttpController {
   ) {
     return firstValueFrom(
       this.monitorClient.send(MONITOR_PATTERNS.TERMINATE, { examId, candidateId }),
+    );
+  }
+
+  // ── Recording ──────────────────────────────────────────────────────────────
+
+  @Get(':examId/recording/upload-url')
+  @Roles(UserRole.ADMIN, UserRole.PROCTOR, UserRole.STUDENT)
+  @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload a recording chunk directly' })
+  getRecordingUploadUrl(
+    @Param('examId') examId: string,
+    @Query('candidateId') candidateId: string,
+    @Query('chunkIndex') chunkIndex: number,
+  ) {
+    return firstValueFrom(
+      this.monitorClient.send(MONITOR_PATTERNS.RECORDING_GET_UPLOAD_URL, {
+        examId,
+        candidateId,
+        chunkIndex: Number(chunkIndex),
+      }),
+    );
+  }
+
+  @Post(':examId/recording/chunk-saved')
+  @Roles(UserRole.ADMIN, UserRole.PROCTOR, UserRole.STUDENT)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Notify backend that a chunk was successfully uploaded to S3' })
+  saveRecordingChunk(
+    @Param('examId') examId: string,
+    @Body() body: { candidateId: string; publicUrl: string },
+  ) {
+    return firstValueFrom(
+      this.monitorClient.send(MONITOR_PATTERNS.RECORDING_SAVE_CHUNK, {
+        examId,
+        candidateId: body.candidateId,
+        publicUrl: body.publicUrl,
+      }),
+    );
+  }
+
+  @Get(':examId/recordings/:candidateId')
+  @RequirePermissions(AdminPermission.VIEW_REPORTS)
+  @ApiOperation({ summary: 'Get all recording chunk URLs for a candidate' })
+  getRecordingChunks(
+    @Param('examId') examId: string,
+    @Param('candidateId') candidateId: string,
+  ) {
+    return firstValueFrom(
+      this.monitorClient.send(MONITOR_PATTERNS.RECORDING_GET_CHUNKS, { examId, candidateId }),
     );
   }
 }

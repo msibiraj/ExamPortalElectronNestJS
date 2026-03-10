@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
-const isDev = !app.isPackaged;
+const isDev = true;
 const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
 
 let mainWindow = null;
