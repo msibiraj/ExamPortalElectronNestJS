@@ -353,10 +353,34 @@ export default function ViolationReview() {
             )}
 
             {/* ── RECORDING TAB ── */}
-            {activeTab === 'recording' && (
+            {activeTab === 'recording' && (() => {
+              const totalDuration  = recordings.length * CHUNK_DURATION_S;
+              const globalPosition = currentChunk * CHUNK_DURATION_S + videoCurrentTime;
+              const scrubPct       = totalDuration > 0 ? (globalPosition / totalDuration) * 100 : 0;
+
+              const handleScrub = (e) => {
+                const pct           = Number(e.target.value);
+                const targetSeconds = (pct / 100) * totalDuration;
+                const chunkIndex    = Math.min(
+                  Math.floor(targetSeconds / CHUNK_DURATION_S),
+                  recordings.length - 1,
+                );
+                const seekWithin = targetSeconds - chunkIndex * CHUNK_DURATION_S;
+                if (chunkIndex === currentChunk && videoRef.current) {
+                  videoRef.current.currentTime = seekWithin;
+                } else {
+                  setCurrentChunk(chunkIndex);
+                  setPendingSeek(seekWithin);
+                }
+              };
+
+              const timedViolations = violationsWithOffset
+                .filter((v) => v.offsetSeconds != null && v.offsetSeconds >= 0 && totalDuration > 0);
+
+              return (
               <div className="flex gap-6">
 
-                {/* Video player */}
+                {/* Video + scrubber column */}
                 <div className="flex-1 min-w-0">
                   {recordings.length === 0 ? (
                     <div className="flex items-center justify-center h-64 rounded-xl border-2 border-dashed border-gray-200 bg-white text-center text-sm text-gray-400">
@@ -364,77 +388,138 @@ export default function ViolationReview() {
                     </div>
                   ) : (
                     <>
+                      {/* Video — native controls for play/pause/volume only */}
                       <video
                         ref={videoRef}
-                        key={recordings[currentChunk]}   // re-mount when chunk changes
+                        key={recordings[currentChunk]}
                         src={recordings[currentChunk]}
                         controls
                         autoPlay={pendingSeek !== null}
+                        onTimeUpdate={() => setVideoCurrentTime(videoRef.current?.currentTime ?? 0)}
                         onEnded={() => {
                           if (currentChunk < recordings.length - 1) {
                             setCurrentChunk((c) => c + 1);
+                            setVideoCurrentTime(0);
                           }
                         }}
                         className="w-full rounded-xl bg-black shadow"
+                        style={{ '--webkit-media-controls-timeline': 'none' }}
                       />
 
-                      {/* Chunk navigation */}
-                      <div className="mt-3 flex items-center gap-3">
-                        <button
-                          disabled={currentChunk === 0}
-                          onClick={() => setCurrentChunk((c) => c - 1)}
-                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
-                        >
-                          ← Prev
-                        </button>
-                        <span className="text-xs text-gray-500 flex-1 text-center">
-                          Chunk {currentChunk + 1} of {recordings.length}
-                          <span className="text-gray-400 ml-1">
-                            ({formatOffset(currentChunk * CHUNK_DURATION_S)}
-                            {' – '}
-                            {formatOffset((currentChunk + 1) * CHUNK_DURATION_S)})
-                          </span>
-                        </span>
-                        <button
-                          disabled={currentChunk === recordings.length - 1}
-                          onClick={() => setCurrentChunk((c) => c + 1)}
-                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
-                        >
-                          Next →
-                        </button>
+                      {/* ── Global scrubber ── */}
+                      <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+
+                        {/* Time labels */}
+                        <div className="flex justify-between text-xs text-gray-400 font-mono mb-2">
+                          <span>{formatOffset(globalPosition)}</span>
+                          <span>{formatOffset(totalDuration)}</span>
+                        </div>
+
+                        {/* Track + markers + input */}
+                        <div className="relative h-6 flex items-center">
+
+                          {/* Track background */}
+                          <div className="absolute inset-x-0 h-2 rounded-full bg-gray-200" />
+
+                          {/* Filled portion */}
+                          <div
+                            className="absolute left-0 h-2 rounded-full bg-indigo-500 pointer-events-none"
+                            style={{ width: `${scrubPct}%` }}
+                          />
+
+                          {/* Chunk boundary ticks */}
+                          {recordings.slice(0, -1).map((_, i) => {
+                            const tickPct = ((i + 1) * CHUNK_DURATION_S / totalDuration) * 100;
+                            return (
+                              <div
+                                key={i}
+                                className="absolute w-px h-3 bg-gray-400/50 pointer-events-none"
+                                style={{ left: `${tickPct}%`, top: '50%', transform: 'translateY(-50%)' }}
+                              />
+                            );
+                          })}
+
+                          {/* Violation markers */}
+                          {timedViolations.map((v) => {
+                            const pct = Math.min((v.offsetSeconds / totalDuration) * 100, 99.5);
+                            const dot =
+                              v.severity === 'high'   ? 'bg-red-500'   :
+                              v.severity === 'medium' ? 'bg-amber-400' : 'bg-gray-400';
+                            return (
+                              <div
+                                key={v._id}
+                                onClick={() => seekToViolation(v)}
+                                title={`${getMeta(v.type).label} @ ${formatOffset(v.offsetSeconds)}`}
+                                className={`absolute w-3 h-3 rounded-full border-2 border-white cursor-pointer z-10 hover:scale-125 transition-transform ${dot}`}
+                                style={{
+                                  left: `${pct}%`,
+                                  top: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                }}
+                              />
+                            );
+                          })}
+
+                          {/* Playhead */}
+                          <div
+                            className="absolute w-4 h-4 rounded-full bg-white border-2 border-indigo-600 shadow pointer-events-none z-20"
+                            style={{
+                              left: `${scrubPct}%`,
+                              top: '50%',
+                              transform: 'translate(-50%, -50%)',
+                            }}
+                          />
+
+                          {/* Invisible range input stretched over the track */}
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={scrubPct}
+                            onChange={handleScrub}
+                            className="absolute inset-0 w-full opacity-0 cursor-pointer z-30"
+                          />
+                        </div>
+
+                        {/* Chunk label */}
+                        <div className="mt-2 text-center text-xs text-gray-400">
+                          Segment {currentChunk + 1}/{recordings.length}
+                          &nbsp;·&nbsp;
+                          {formatOffset(currentChunk * CHUNK_DURATION_S)}
+                          {' – '}
+                          {formatOffset((currentChunk + 1) * CHUNK_DURATION_S)}
+                        </div>
                       </div>
                     </>
                   )}
                 </div>
 
-                {/* Violation timeline */}
-                <div className="w-64 flex-shrink-0">
+                {/* Violation timeline list */}
+                <div className="w-60 flex-shrink-0">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Violation Timeline
+                    Violations
                   </p>
-                  {violationsWithOffset.length === 0 ? (
+                  {timedViolations.length === 0 ? (
                     <p className="text-xs text-gray-400">No violations.</p>
                   ) : (
-                    <div className="space-y-1 max-h-[480px] overflow-y-auto pr-1">
-                      {violationsWithOffset
-                        .filter((v) => v.offsetSeconds != null && v.offsetSeconds >= 0)
+                    <div className="space-y-1 max-h-[520px] overflow-y-auto pr-1">
+                      {[...timedViolations]
                         .sort((a, b) => a.offsetSeconds - b.offsetSeconds)
                         .map((v) => {
                           const meta     = getMeta(v.type);
                           const sevStyle = SEVERITY_STYLE[v.severity] || SEVERITY_STYLE.low;
-                          const chunkForV = Math.floor(v.offsetSeconds / CHUNK_DURATION_S);
-                          const isInCurrentChunk = chunkForV === currentChunk;
+                          const isActive =
+                            Math.floor(v.offsetSeconds / CHUNK_DURATION_S) === currentChunk &&
+                            Math.abs(v.offsetSeconds - globalPosition) < CHUNK_DURATION_S;
                           return (
                             <button
                               key={v._id}
                               onClick={() => seekToViolation(v)}
-                              disabled={recordings.length === 0}
                               className={`w-full text-left rounded-lg border p-2 transition-colors text-xs
-                                ${isInCurrentChunk
+                                ${isActive
                                   ? 'border-indigo-300 bg-indigo-50'
-                                  : 'border-gray-100 bg-white hover:bg-gray-50'
-                                }
-                                disabled:opacity-40 disabled:cursor-not-allowed`}
+                                  : 'border-gray-100 bg-white hover:bg-gray-50'}`}
                             >
                               <div className="flex items-center justify-between gap-1 mb-0.5">
                                 <span className={`rounded-full px-1.5 py-0.5 font-medium text-[10px] ${meta.color}`}>
@@ -454,7 +539,8 @@ export default function ViolationReview() {
                   )}
                 </div>
               </div>
-            )}
+              );
+            })()}
           </>
         )}
       </div>
