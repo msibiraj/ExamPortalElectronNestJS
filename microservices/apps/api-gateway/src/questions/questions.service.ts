@@ -1,9 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, ConflictException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import {
-  QUESTION_SERVICE,
-  QUESTION_PATTERNS,
+  QUESTION_SERVICE, EXAM_SERVICE,
+  EXAM_PATTERNS, QUESTION_PATTERNS,
   CreateQuestionDto,
   UpdateQuestionDto,
   QuestionFilterDto,
@@ -16,6 +16,7 @@ import {
 export class QuestionsService {
   constructor(
     @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
+    @Inject(EXAM_SERVICE) private readonly examClient: ClientProxy,
   ) {}
 
   create(dto: CreateQuestionDto, userId: string, organizationId: string) {
@@ -118,7 +119,15 @@ export class QuestionsService {
     );
   }
 
-  hardDelete(id: string) {
+  async hardDelete(id: string) {
+    const { count } = await firstValueFrom(
+      this.examClient.send(EXAM_PATTERNS.PAPER_HAS_QUESTION, { questionId: id }),
+    );
+    if (count > 0) {
+      throw new ConflictException(
+        `Cannot delete: question is referenced in ${count} exam paper(s)`,
+      );
+    }
     return firstValueFrom(
       this.questionClient.send(QUESTION_PATTERNS.HARD_DELETE, { id }),
     );

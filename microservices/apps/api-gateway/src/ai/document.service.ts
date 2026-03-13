@@ -27,8 +27,8 @@ export class DocumentService {
   // ─── Text Extraction ─────────────────────────────────────────────────────────
 
   private async extractPdf(buffer: Buffer): Promise<string> {
-    // Dynamically require to avoid ESM issues
-    const pdfParse = require('pdf-parse');
+    const mod = require('pdf-parse');
+    const pdfParse = mod.default ?? mod;
     const data = await pdfParse(buffer);
     return data.text;
   }

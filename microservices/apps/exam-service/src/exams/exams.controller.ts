@@ -39,6 +39,11 @@ export class ExamsController {
     return this.examsService.deletePaper(p.id);
   }
 
+  @MessagePattern(EXAM_PATTERNS.PAPER_HAS_QUESTION)
+  paperHasQuestion(@Payload() p: { questionId: string }) {
+    return this.examsService.paperHasQuestion(p.questionId);
+  }
+
   // ── SCHEDULE ───────────────────────────────────────────────────────────────
 
   @MessagePattern(EXAM_PATTERNS.SCHEDULE_CREATE)

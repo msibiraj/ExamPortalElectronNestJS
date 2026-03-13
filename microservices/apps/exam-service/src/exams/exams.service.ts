@@ -44,6 +44,13 @@ export class ExamsService {
     return paper;
   }
 
+  async paperHasQuestion(questionId: string) {
+    const count = await this.paperModel.countDocuments({
+      'sections.questions.questionId': new Types.ObjectId(questionId),
+    });
+    return { count };
+  }
+
   async updatePaper(id: string, dto: any, userId: string) {
     const paper = await this.paperModel.findById(id);
     if (!paper) throw new RpcException(new NotFoundException('Exam paper not found'));

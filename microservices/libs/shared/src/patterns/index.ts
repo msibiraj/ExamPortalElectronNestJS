@@ -48,6 +48,7 @@ export const EXAM_PATTERNS = {
   PAPER_UPDATE: 'exam.paper.update',
   PAPER_PUBLISH: 'exam.paper.publish',
   PAPER_DELETE: 'exam.paper.delete',
+  PAPER_HAS_QUESTION: 'exam.paper.has_question',
   SCHEDULE_CREATE: 'exam.schedule.create',
   SCHEDULE_FIND_ALL: 'exam.schedule.find_all',
   SCHEDULE_FIND_ONE: 'exam.schedule.find_one',
