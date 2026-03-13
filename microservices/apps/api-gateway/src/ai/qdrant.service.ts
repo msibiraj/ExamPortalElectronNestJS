@@ -11,6 +11,7 @@ export interface ChunkPayload {
   chunkId: string;
   name: string;
   content: string;
+  [key: string]: unknown;
 }
 
 @Injectable()
