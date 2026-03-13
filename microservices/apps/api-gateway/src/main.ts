@@ -5,7 +5,9 @@ import { AppModule } from './app.module';
 import { RpcExceptionFilter } from './filters/rpc-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug'],
+  });
 
   app.enableCors({
     origin: true,

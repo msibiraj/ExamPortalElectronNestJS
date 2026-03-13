@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
@@ -114,9 +114,10 @@ STRICT VALIDATION RULES — violations will cause save failures:
 10. topic MUST be a non-empty string
 
 BEHAVIOR:
-- When user does not specify question type, ask them
-- When user does not specify count, ask them
-- When user does not specify difficulty, ask them
+- ALWAYS read the full conversation history before responding — details like type, count, and difficulty may have been given in earlier turns
+- If the user has already specified type, count, or difficulty in any previous message, use those values — do NOT ask again
+- Only ask for missing information that has NOT been provided anywhere in the conversation
+- Once you have type + count, generate immediately (difficulty defaults to "medium" if not specified)
 - Generate exactly the number requested
 - For programming questions, always include at least 4 test cases (mix of visible and hidden)
 - For programming questions, always include starter code for each allowed language
@@ -125,6 +126,7 @@ BEHAVIOR:
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
   private groq: Groq;
 
   constructor(
@@ -223,6 +225,8 @@ ${combined.slice(0, 10000)}
       ...historyMessages,
       { role: 'user', content: message || '' },
     ];
+
+    this.logger.debug(`Sending ${groqMessages.length} messages to Groq:\n${JSON.stringify(groqMessages, null, 2)}`);
 
     let response: Groq.Chat.ChatCompletion;
     try {
