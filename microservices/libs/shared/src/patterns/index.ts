@@ -38,6 +38,7 @@ export const QUESTION_PATTERNS = {
   FLAG_REVIEW: 'question.flag_review',
   CLEAR_FLAG: 'question.clear_flag',
   BULK_PUBLISH: 'question.bulk_publish',
+  HARD_DELETE: 'question.hard_delete',
 };
 
 export const EXAM_PATTERNS = {

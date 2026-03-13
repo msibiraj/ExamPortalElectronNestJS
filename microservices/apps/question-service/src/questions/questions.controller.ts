@@ -96,4 +96,9 @@ export class QuestionsController {
   clearFlag(@Payload() payload: { id: string }) {
     return this.questionsService.flagReview(payload.id, false);
   }
+
+  @MessagePattern(QUESTION_PATTERNS.HARD_DELETE)
+  hardDelete(@Payload() payload: { id: string }) {
+    return this.questionsService.hardDelete(payload.id);
+  }
 }

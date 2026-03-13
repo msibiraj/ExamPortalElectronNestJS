@@ -152,4 +152,10 @@ export class QuestionsController {
   clearFlag(@Param('id') id: string) {
     return this.questionsService.clearFlag(id);
   }
+
+  @Delete(':id/permanent')
+  @ApiOperation({ summary: 'Permanently delete a question and its version history from the database' })
+  hardDelete(@Param('id') id: string) {
+    return this.questionsService.hardDelete(id);
+  }
 }

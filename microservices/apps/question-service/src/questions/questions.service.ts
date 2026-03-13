@@ -120,6 +120,14 @@ export class QuestionsService {
     return question;
   }
 
+  async hardDelete(id: string) {
+    const question = await this.questionModel.findByIdAndDelete(id).lean();
+    if (!question) throw new RpcException(new NotFoundException('Question not found'));
+    // Also remove all version history
+    await this.versionModel.deleteMany({ questionId: id });
+    return { deleted: true, id };
+  }
+
   // ── DUPLICATE ──────────────────────────────────────────────────────────────
 
   async duplicate(id: string, userId: string) {

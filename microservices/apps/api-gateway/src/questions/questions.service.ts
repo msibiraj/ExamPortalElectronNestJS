@@ -117,4 +117,10 @@ export class QuestionsService {
       this.questionClient.send(QUESTION_PATTERNS.CLEAR_FLAG, { id }),
     );
   }
+
+  hardDelete(id: string) {
+    return firstValueFrom(
+      this.questionClient.send(QUESTION_PATTERNS.HARD_DELETE, { id }),
+    );
+  }
 }

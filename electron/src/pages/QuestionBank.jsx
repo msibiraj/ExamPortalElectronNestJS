@@ -74,6 +74,16 @@ export default function QuestionBank() {
     fetchQuestions();
   };
 
+  const handleHardDelete = async (id) => {
+    if (!confirm('Permanently delete this question? This cannot be undone and will also remove all version history.')) return;
+    try {
+      await api.delete(`/questions/${id}/permanent`);
+      fetchQuestions();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Delete failed');
+    }
+  };
+
   const handleDuplicate = async (id) => {
     await api.post(`/questions/${id}/duplicate`);
     fetchQuestions();
@@ -398,6 +408,15 @@ export default function QuestionBank() {
                             className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500"
                           >
                             🗑️
+                          </button>
+                        )}
+                        {q.status === 'archived' && (
+                          <button
+                            onClick={() => handleHardDelete(q._id)}
+                            title="Delete permanently"
+                            className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 border border-red-200"
+                          >
+                            Delete
                           </button>
                         )}
                       </div>

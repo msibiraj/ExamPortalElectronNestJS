@@ -4,57 +4,124 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
+import { DocumentService } from './document.service';
 
 const SYSTEM_PROMPT = `You are an AI assistant for an exam portal that helps create high-quality exam questions.
 
-You help instructors generate questions by having a friendly conversation. You ask clarifying questions when needed and make suggestions based on what they already have.
+You help instructors generate questions through a friendly conversation. You ask clarifying questions when needed.
 
 QUESTION TYPES available:
-- mcq-single: Multiple choice, one correct answer (provide 4 options)
-- mcq-multiple: Multiple choice, multiple correct answers (provide 4 options)
-- descriptive: Short/long answer (no options needed)
-- programming: Coding question (include problem statement, sample input/output in body)
+- mcq-single: Multiple choice, exactly ONE correct answer (always provide exactly 4 options)
+- mcq-multiple: Multiple choice, MULTIPLE correct answers (always provide exactly 4 options)
+- descriptive: Short/long answer — no options needed
+- programming: Coding problem — include clear problem statement with sample input/output in the body
 
 DIFFICULTY LEVELS: easy, medium, hard
 
-RESPONSE FORMAT (STRICT):
-Always respond with a valid JSON object:
+═══════════════════════════════════════════════════
+RESPONSE FORMAT — always return a single valid JSON object, no markdown, no text outside JSON:
+═══════════════════════════════════════════════════
+
+For conversational replies (no generation):
 {
-  "message": "your conversational reply here",
+  "message": "your reply here",
   "questions": null
 }
 
-When generating questions, set questions to an array:
+For MCQ questions:
 {
-  "message": "Here are the questions I generated:",
+  "message": "Here are your questions:",
   "questions": [
     {
       "type": "mcq-single",
-      "topic": "React Hooks",
+      "topic": "Topic Name",
       "difficulty": "medium",
       "marks": 2,
-      "body": "Question text here",
-      "tags": ["react", "hooks"],
-      "explanation": "Why this answer is correct",
+      "body": "Question text here?",
+      "tags": ["tag1", "tag2"],
+      "explanation": "Why the correct answer is correct",
       "options": [
-        { "text": "Option A", "isCorrect": true },
-        { "text": "Option B", "isCorrect": false },
-        { "text": "Option C", "isCorrect": false },
-        { "text": "Option D", "isCorrect": false }
+        { "text": "Correct answer", "isCorrect": true },
+        { "text": "Wrong option B", "isCorrect": false },
+        { "text": "Wrong option C", "isCorrect": false },
+        { "text": "Wrong option D", "isCorrect": false }
       ]
     }
   ]
 }
 
-For descriptive/programming questions, omit the options field.
+For descriptive questions:
+{
+  "message": "Here are your questions:",
+  "questions": [
+    {
+      "type": "descriptive",
+      "topic": "Topic Name",
+      "difficulty": "medium",
+      "marks": 10,
+      "body": "Question text here",
+      "tags": ["tag1"],
+      "explanation": "Model answer or key points",
+      "markingRubric": "Award 5 marks for X, 3 marks for Y, 2 marks for Z",
+      "minWords": 100,
+      "maxWords": 300
+    }
+  ]
+}
+
+For programming questions:
+{
+  "message": "Here are your questions:",
+  "questions": [
+    {
+      "type": "programming",
+      "topic": "Topic Name",
+      "difficulty": "hard",
+      "marks": 10,
+      "body": "Problem statement with clear requirements.\n\nSample Input:\n5\n\nSample Output:\n120\n\nConstraints:\n- 1 <= n <= 20",
+      "tags": ["tag1", "algorithms"],
+      "explanation": "Explanation of the approach",
+      "allowedLanguages": ["python", "javascript", "java"],
+      "timeLimits": { "python": 2000, "javascript": 1500, "java": 2000 },
+      "memoryLimit": 256,
+      "starterCode": {
+        "python": "def solve(n):\n    # Write your code here\n    pass",
+        "javascript": "function solve(n) {\n    // Write your code here\n}",
+        "java": "public class Solution {\n    public static int solve(int n) {\n        // Write your code here\n        return 0;\n    }\n}"
+      },
+      "referenceLanguage": "python",
+      "referenceSolution": "def solve(n):\n    if n <= 1:\n        return 1\n    return n * solve(n - 1)",
+      "testCases": [
+        { "input": "1", "expectedOutput": "1", "weight": 10, "isHidden": false },
+        { "input": "5", "expectedOutput": "120", "weight": 20, "isHidden": false },
+        { "input": "10", "expectedOutput": "3628800", "weight": 30, "isHidden": true },
+        { "input": "15", "expectedOutput": "1307674368000", "weight": 40, "isHidden": true }
+      ]
+    }
+  ]
+}
+
+STRICT VALIDATION RULES — violations will cause save failures:
+1. type MUST be exactly one of: mcq-single, mcq-multiple, descriptive, programming
+2. difficulty MUST be exactly one of: easy, medium, hard
+3. marks MUST be a positive integer (default 2 for MCQ, 5 for descriptive, 10 for programming)
+4. tags MUST be an array of strings (never null, never a string)
+5. MCQ questions MUST have exactly 4 options with AT LEAST ONE option where isCorrect is true
+6. mcq-single MUST have exactly ONE isCorrect:true option
+7. mcq-multiple MUST have TWO or MORE isCorrect:true options
+8. Programming questions MUST have testCases array where ALL weights are positive integers and weights SUM TO EXACTLY 100
+9. body MUST be a non-empty string
+10. topic MUST be a non-empty string
 
 BEHAVIOR:
-- Start by greeting and asking what topic and type of questions they need
-- Suggest subtopics if the user gives a broad topic
-- Warn if a topic already has many questions (based on context provided)
-- When generating, always produce the exact count requested
-- Keep questions clear, unambiguous, and educationally sound
-- Do NOT include markdown, code blocks, or any text outside the JSON object`;
+- When user does not specify question type, ask them
+- When user does not specify count, ask them
+- When user does not specify difficulty, ask them
+- Generate exactly the number requested
+- For programming questions, always include at least 4 test cases (mix of visible and hidden)
+- For programming questions, always include starter code for each allowed language
+- Keep questions grounded in the document content provided (if any)
+- Do NOT generate outside the scope of the provided document content`;
 
 @Injectable()
 export class AiService {
@@ -63,6 +130,7 @@ export class AiService {
   constructor(
     private configService: ConfigService,
     @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
+    private readonly documentService: DocumentService,
   ) {
     this.genAI = new GoogleGenerativeAI(
       this.configService.get<string>('GEMINI_API_KEY'),
@@ -74,42 +142,56 @@ export class AiService {
     history: { role: string; parts: { text: string }[] }[],
     userId: string,
     organizationId: string,
+    documentId?: string,
+    topicId?: string,
   ) {
-    // Fetch existing topics to give AI context about what's already in the bank
-    let topicsContext = '';
-    try {
-      const questions: any[] = await firstValueFrom(
-        this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, {
-          filter: {},
-          userId,
-          organizationId,
-        }),
-      );
-      if (questions?.length) {
-        const topicCounts: Record<string, number> = {};
-        questions.forEach((q) => {
-          topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1;
-        });
-        const topicList = Object.entries(topicCounts)
-          .sort((a, b) => b[1] - a[1])
-          .map(([t, c]) => `${t} (${c} questions)`)
-          .join(', ');
-        topicsContext = `\n\nEXISTING QUESTION BANK CONTEXT:\nTopics already in the bank: ${topicList}\nTotal questions: ${questions.length}\nUse this to avoid duplicates and suggest underrepresented topics.`;
+    let contextSection = '';
+
+    if (documentId && topicId) {
+      // ── Document RAG mode: inject the selected topic's content ──
+      const topicContent = await this.documentService.getTopicContent(documentId, topicId);
+      if (topicContent) {
+        contextSection = `\n\n═══════════════════════════════════════════
+DOCUMENT CONTEXT — Generate questions ONLY from this content:
+═══════════════════════════════════════════
+${topicContent.slice(0, 8000)}
+═══════════════════════════════════════════`;
       }
-    } catch {
-      // proceed without context if question service unavailable
+    } else {
+      // ── General mode: inject question bank topic summary ──
+      try {
+        const questions: any[] = await firstValueFrom(
+          this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, {
+            filter: {},
+            userId,
+            organizationId,
+          }),
+        );
+        if (questions?.length) {
+          const topicCounts: Record<string, number> = {};
+          questions.forEach((q) => {
+            topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1;
+          });
+          const topicList = Object.entries(topicCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([t, c]) => `${t} (${c})`)
+            .join(', ');
+          contextSection = `\n\nQUESTION BANK: ${questions.length} questions. Topics: ${topicList}. Avoid duplicates.`;
+        }
+      } catch {
+        // proceed without context
+      }
     }
 
     const model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
-      systemInstruction: SYSTEM_PROMPT + topicsContext,
+      systemInstruction: SYSTEM_PROMPT + contextSection,
     });
 
     const chat = model.startChat({ history });
     const result = await chat.sendMessage(message);
     const rawText = result.response.text().trim();
 
-    // Strip markdown code fences if Gemini wraps the JSON
     const jsonText = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
 
     try {
