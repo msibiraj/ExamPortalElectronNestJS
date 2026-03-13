@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ClientsModule, ClientsProviderAsyncOptions, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { QUESTION_SERVICE, EXAM_SERVICE } from '@app/shared';
 import { QuestionsController } from './questions.controller';
@@ -7,7 +7,7 @@ import { QuestionsService } from './questions.service';
 import { AuthModule } from '../auth/auth.module';
 import { RolesGuard } from '../guards/roles.guard';
 
-const redisClientFactory = (name: string) => ({
+const redisClientFactory = (name: string): ClientsProviderAsyncOptions => ({
   name,
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => ({
