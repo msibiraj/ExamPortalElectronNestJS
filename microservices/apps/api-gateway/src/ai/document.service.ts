@@ -27,8 +27,7 @@ export class DocumentService {
   // ─── Text Extraction ─────────────────────────────────────────────────────────
 
   private async extractPdf(buffer: Buffer): Promise<string> {
-    const mod = require('pdf-parse');
-    const pdfParse = mod.default ?? mod;
+    const pdfParse = require('pdf-parse/lib/pdf-parse.js');
     const data = await pdfParse(buffer);
     return data.text;
   }
