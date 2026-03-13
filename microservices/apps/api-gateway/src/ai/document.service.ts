@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import * as mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { DocumentChunk, DocumentChunkDocument, TopicChunk } from './schemas/document-chunk.schema';
 import { QdrantService } from './qdrant.service';
@@ -51,7 +52,6 @@ export class DocumentService {
   // ─── Text Extraction ─────────────────────────────────────────────────────────
 
   private async extractPdf(buffer: Buffer): Promise<string> {
-    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     const result = await parser.getText();
     return result.text;
@@ -78,8 +78,9 @@ export class DocumentService {
   // ─── Paragraph Chunking (free, no API) ───────────────────────────────────────
 
   private splitIntoChunks(text: string): TopicChunk[] {
+    // Split on double newlines OR single newlines followed by a capital letter / number (PDF paragraph breaks)
     const paragraphs = text
-      .split(/\n{2,}/)
+      .split(/\n{2,}|\n(?=[A-Z0-9])/)
       .map((p) => p.replace(/\n+/g, ' ').trim())
       .filter((p) => p.length >= MIN_CHUNK_CHARS);
 

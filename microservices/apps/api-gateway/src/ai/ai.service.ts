@@ -188,9 +188,9 @@ ${combined.slice(0, 10000)}
     const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = history
       .map((h) => ({
         role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
-        content: h.parts?.[0]?.text ?? (h.content as string) ?? '',
+        content: String(h.parts?.[0]?.text ?? h.content ?? ''),
       }))
-      .filter((m) => m.content);
+      .filter((m) => m.content.trim().length > 0);
 
     groqMessages.push({ role: 'user', content: message });
 
