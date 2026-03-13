@@ -184,15 +184,30 @@ ${combined.slice(0, 10000)}
       }
     }
 
-    // Convert history to Groq format
-    const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = history
+    // Convert history to Groq format, removing empty messages and deduplicating consecutive same-role entries
+    type SimpleMsg = { role: 'user' | 'assistant'; content: string };
+    const historyMessages: SimpleMsg[] = history
       .map((h) => ({
         role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
-        content: String(h.parts?.[0]?.text ?? h.content ?? ''),
+        content: String(h.parts?.[0]?.text ?? h.content ?? '').trim(),
       }))
-      .filter((m) => m.content.trim().length > 0);
+      .filter((m) => m.content.length > 0)
+      .reduce<SimpleMsg[]>((acc, m) => {
+        // Drop consecutive duplicate roles to satisfy Groq's alternation requirement
+        if (acc.length > 0 && acc[acc.length - 1].role === m.role) return acc;
+        acc.push(m);
+        return acc;
+      }, []);
 
-    groqMessages.push({ role: 'user', content: message });
+    // Ensure history ends with assistant so the new user message alternates correctly
+    if (historyMessages.length > 0 && historyMessages[historyMessages.length - 1].role === 'user') {
+      historyMessages.pop();
+    }
+
+    const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = [
+      ...historyMessages,
+      { role: 'user', content: message || '' },
+    ];
 
     let response: Groq.Chat.ChatCompletion;
     try {
