@@ -11,7 +11,8 @@
       "Bash(npm run build:questions:*)",
       "Bash(wc -l /home/sibiraj/project/myprojects/ExamPortalElectronNestJS/electron/src/pages/*.jsx /home/sibiraj/project/myprojects/ExamPortalElectronNestJS/electron/src/pages/admin/*.jsx)",
       "Bash(xargs cat)",
-      "Bash(find /home/sibiraj/project/myprojects/ExamPortalElectronNestJS/microservices/apps/*/src -type d)"
+      "Bash(find /home/sibiraj/project/myprojects/ExamPortalElectronNestJS/microservices/apps/*/src -type d)",
+      "Bash(find /home/sibiraj/project/myprojects/ExamPortalElectronNestJS/microservices/apps/question-service -name *.schema.ts)"
     ]
   }
 }

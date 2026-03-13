@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import AIChatbot from '../components/AIChatbot';
 
 const TYPE_LABELS = {
   'mcq-single': 'MCQ Single',
@@ -33,6 +34,7 @@ export default function QuestionBank() {
   const [bulkTagInput, setBulkTagInput] = useState('');
   const [showBulkTag, setShowBulkTag] = useState(false);
   const [error, setError] = useState('');
+  const [showAIChatbot, setShowAIChatbot] = useState(false);
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
@@ -154,6 +156,12 @@ export default function QuestionBank() {
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
           >
             Import Questions
+          </button>
+          <button
+            onClick={() => setShowAIChatbot(true)}
+            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700 flex items-center gap-1.5"
+          >
+            <span>✦</span> Generate with AI
           </button>
           <button
             onClick={() => navigate('/questions/new')}
@@ -405,6 +413,13 @@ export default function QuestionBank() {
           {questions.length} question{questions.length !== 1 ? 's' : ''} found
         </div>
       </div>
+
+      {showAIChatbot && (
+        <AIChatbot
+          onClose={() => setShowAIChatbot(false)}
+          onQuestionsAdded={fetchQuestions}
+        />
+      )}
     </div>
   );
 }

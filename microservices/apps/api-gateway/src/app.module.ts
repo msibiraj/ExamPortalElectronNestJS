@@ -5,6 +5,7 @@ import { QuestionsModule } from './questions/questions.module';
 import { MonitorModule } from './monitor/monitor.module';
 import { CodeRunnerModule } from './code-runner/code-runner.module';
 import { ExamsModule } from './exams/exams.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ExamsModule } from './exams/exams.module';
     MonitorModule,
     CodeRunnerModule,
     ExamsModule,
+    AiModule,
   ],
 })
 export class AppModule {}
