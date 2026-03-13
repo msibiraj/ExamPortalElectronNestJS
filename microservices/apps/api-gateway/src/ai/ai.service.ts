@@ -184,23 +184,38 @@ ${combined.slice(0, 10000)}
       }
     }
 
-    // Convert history to Groq format, removing empty messages and deduplicating consecutive same-role entries
+    // Convert history to Groq format.
+    // Assistant messages are stored as JSON strings on the frontend — extract just the readable text.
     type SimpleMsg = { role: 'user' | 'assistant'; content: string };
     const historyMessages: SimpleMsg[] = history
-      .map((h) => ({
-        role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
-        content: String(h.parts?.[0]?.text ?? h.content ?? '').trim(),
-      }))
+      .map((h) => {
+        const raw = String(h.parts?.[0]?.text ?? h.content ?? '').trim();
+        let content = raw;
+        if (h.role === 'model') {
+          try {
+            const parsed = JSON.parse(raw);
+            const msgText = (parsed.message || '').trim();
+            const qCount = parsed.questions?.length ?? 0;
+            content = qCount > 0 ? `${msgText}\n[Generated ${qCount} question(s)]`.trim() : msgText;
+          } catch {
+            // not JSON, use raw text
+          }
+        }
+        return {
+          role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+          content,
+        };
+      })
       .filter((m) => m.content.length > 0)
       .reduce<SimpleMsg[]>((acc, m) => {
-        // Drop consecutive duplicate roles to satisfy Groq's alternation requirement
+        // Merge consecutive same-role messages (can happen after filtering empties)
         if (acc.length > 0 && acc[acc.length - 1].role === m.role) return acc;
         acc.push(m);
         return acc;
       }, []);
 
-    // Ensure history ends with assistant so the new user message alternates correctly
-    if (historyMessages.length > 0 && historyMessages[historyMessages.length - 1].role === 'user') {
+    // Ensure history ends with assistant so the appended user message alternates correctly
+    while (historyMessages.length > 0 && historyMessages[historyMessages.length - 1].role === 'user') {
       historyMessages.pop();
     }
 
