@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
 import { DocumentService } from './document.service';
 
@@ -125,15 +125,15 @@ BEHAVIOR:
 
 @Injectable()
 export class AiService {
-  private anthropic: Anthropic;
+  private groq: Groq;
 
   constructor(
     private configService: ConfigService,
     @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
     private readonly documentService: DocumentService,
   ) {
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
+    this.groq = new Groq({
+      apiKey: this.configService.get<string>('GROQ_API_KEY'),
     });
   }
 
@@ -143,17 +143,20 @@ export class AiService {
     userId: string,
     organizationId: string,
     documentId?: string,
-    topicId?: string,
   ) {
     let contextSection = '';
 
-    if (documentId && topicId) {
-      const topicContent = await this.documentService.getTopicContent(documentId, topicId);
-      if (topicContent) {
+    if (documentId) {
+      // RAG: embed the user's query and retrieve the most relevant chunks from Qdrant
+      const relevantTopics = await this.documentService.searchSimilarTopics(message, documentId);
+      if (relevantTopics.length) {
+        const combined = relevantTopics
+          .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
+          .join('\n\n');
         contextSection = `\n\n═══════════════════════════════════════════
-DOCUMENT CONTEXT — Generate questions ONLY from this content:
+RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content:
 ═══════════════════════════════════════════
-${topicContent.slice(0, 8000)}
+${combined.slice(0, 10000)}
 ═══════════════════════════════════════════`;
       }
     } else {
@@ -181,23 +184,25 @@ ${topicContent.slice(0, 8000)}
       }
     }
 
-    // Convert from Gemini history format {role, parts:[{text}]} to Claude format {role, content}
-    const claudeHistory: Anthropic.MessageParam[] = history
+    // Convert history to Groq format
+    const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = history
       .map((h) => ({
         role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
         content: h.parts?.[0]?.text ?? (h.content as string) ?? '',
       }))
       .filter((m) => m.content);
 
-    claudeHistory.push({ role: 'user', content: message });
+    groqMessages.push({ role: 'user', content: message });
 
-    let response: Anthropic.Message;
+    let response: Groq.Chat.ChatCompletion;
     try {
-      response = await this.anthropic.messages.create({
-        model: 'claude-opus-4-6',
+      response = await this.groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
         max_tokens: 4096,
-        system: SYSTEM_PROMPT + contextSection,
-        messages: claudeHistory,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT + contextSection },
+          ...groqMessages,
+        ],
       });
     } catch (err: any) {
       if (err?.status === 429) {
@@ -209,7 +214,7 @@ ${topicContent.slice(0, 8000)}
       throw err;
     }
 
-    const rawText = (response.content[0] as Anthropic.TextBlock).text.trim();
+    const rawText = response.choices[0].message.content?.trim() ?? '';
     const jsonText = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
 
     try {

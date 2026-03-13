@@ -253,8 +253,7 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
 
   // Document state
   const [uploading, setUploading]   = useState(false);
-  const [document, setDocument]     = useState(null);   // { documentId, filename, topics }
-  const [activeTopic, setActiveTopic] = useState(null); // { id, name, preview }
+  const [document, setDocument]     = useState(null);   // { documentId, filename, chunkCount }
 
   const bottomRef  = useRef(null);
   const inputRef   = useRef(null);
@@ -282,14 +281,13 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setDocument(res.data);
-      setActiveTopic(null);
 
       // Add a system message in chat showing the document was loaded
       setMessages((prev) => [...prev, {
         role: 'model',
         parts: [{ text: '' }],
         parsed: {
-          message: `Document loaded: **${res.data.filename}**\n\nI found ${res.data.topics.length} topics. Select a topic below to generate questions from that section, or ask me anything directly.`,
+          message: `Document loaded: **${res.data.filename}**\n\n${res.data.chunkCount} chunks indexed. Just ask me to generate questions — I'll automatically find the most relevant sections.`,
           questions: null,
         },
       }]);
@@ -301,15 +299,8 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
     }
   };
 
-  const selectTopic = (topic) => {
-    setActiveTopic(topic);
-    setInput(`Generate questions from "${topic.name}"`);
-    inputRef.current?.focus();
-  };
-
   const clearDocument = () => {
     setDocument(null);
-    setActiveTopic(null);
   };
 
   // ── Send Message ─────────────────────────────────────────────────────────────
@@ -333,7 +324,6 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
         message: text,
         history: getApiHistory(),
         documentId: document?.documentId || undefined,
-        topicId: activeTopic?.id || undefined,
       });
 
       setMessages((prev) => [...prev, {
@@ -375,7 +365,7 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
   // ─────────────────────────────────────────────────────────────────────────────
 
   const suggestions = document
-    ? document.topics.slice(0, 4).map((t) => `5 MCQs from "${t.name}"`)
+    ? ['5 MCQs from this document', '3 hard descriptive questions', '2 programming questions', 'What topics does this cover?']
     : ['5 easy MCQ on Python basics', '3 hard React hooks questions', '2 descriptive SQL questions', 'What topics should I add?'];
 
   return (
@@ -403,33 +393,12 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
           </div>
         </div>
 
-        {/* ── Topics Panel (shown after document upload) ── */}
-        {document?.topics?.length > 0 && (
-          <div className="border-b border-gray-200 bg-white px-4 py-2.5">
-            <div className="text-xs font-medium text-gray-500 mb-1.5">Topics from document — click to generate from that section:</div>
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-              {document.topics.map((topic) => (
-                <button
-                  key={topic.id}
-                  onClick={() => selectTopic(topic)}
-                  title={topic.preview}
-                  className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
-                    activeTopic?.id === topic.id
-                      ? 'bg-violet-600 text-white border-violet-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-violet-400 hover:text-violet-600'
-                  }`}
-                >
-                  {topic.name}
-                </button>
-              ))}
-            </div>
-            {activeTopic && (
-              <div className="mt-1.5 text-xs text-violet-600 flex items-center gap-1">
-                <span>Active:</span>
-                <span className="font-medium">{activeTopic.name}</span>
-                <button onClick={() => setActiveTopic(null)} className="ml-auto text-gray-400 hover:text-gray-600">✕ deselect</button>
-              </div>
-            )}
+        {/* ── Document badge (shown after upload) ── */}
+        {document && (
+          <div className="border-b border-gray-200 bg-violet-50 px-4 py-2 flex items-center gap-2">
+            <span className="text-xs text-violet-700 font-medium">📄 {document.filename}</span>
+            <span className="text-xs text-gray-400">· {document.chunkCount} chunks indexed</span>
+            <span className="text-xs text-gray-400 ml-1">· Relevant sections retrieved automatically</span>
           </div>
         )}
 
@@ -521,7 +490,7 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
           <div className="flex gap-2 items-end">
             <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={activeTopic ? `Generate from "${activeTopic.name}"...` : 'Ask me to generate questions...'}
+              placeholder={document ? 'Ask me to generate questions from this document...' : 'Ask me to generate questions...'}
               rows={2}
               className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />

@@ -8,6 +8,7 @@ import { QUESTION_SERVICE } from '@app/shared';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { DocumentService } from './document.service';
+import { QdrantService } from './qdrant.service';
 import { AuthModule } from '../auth/auth.module';
 import { DocumentChunk, DocumentChunkSchema } from './schemas/document-chunk.schema';
 
@@ -52,6 +53,6 @@ const AI_DB_CONNECTION = 'ai_db';
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, DocumentService],
+  providers: [AiService, DocumentService, QdrantService],
 })
 export class AiModule {}

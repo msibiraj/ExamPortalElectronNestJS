@@ -41,7 +41,6 @@ export class AiController {
       user.id,
       user.organizationId,
       dto.documentId,
-      dto.topicId,
     );
   }
 

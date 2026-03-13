@@ -6,8 +6,9 @@ export type DocumentChunkDocument = DocumentChunk & Document;
 export interface TopicChunk {
   id: string;
   name: string;
-  content: string;   // full text of this topic section
-  preview: string;   // first 150 chars shown in UI
+  content: string;
+  preview: string;
+  // embeddings are stored in Qdrant, not MongoDB
 }
 
 @Schema({ timestamps: true })

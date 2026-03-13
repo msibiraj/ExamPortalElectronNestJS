@@ -2,26 +2,50 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
-import Anthropic from '@anthropic-ai/sdk';
 import * as mammoth from 'mammoth';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { DocumentChunk, DocumentChunkDocument, TopicChunk } from './schemas/document-chunk.schema';
+import { QdrantService } from './qdrant.service';
 
-// Max characters to send to Gemini for topic detection (free tier safe)
-const MAX_CHARS = 40000;
+const MIN_CHUNK_CHARS = 100;
+const MAX_CHUNK_CHARS = 1500;
 
 @Injectable()
 export class DocumentService {
   private readonly logger = new Logger(DocumentService.name);
-  private anthropic: Anthropic;
+  private genAI: GoogleGenerativeAI;
 
   constructor(
     private configService: ConfigService,
     @InjectModel(DocumentChunk.name, 'ai_db')
     private documentModel: Model<DocumentChunkDocument>,
+    private qdrantService: QdrantService,
   ) {
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    this.genAI = new GoogleGenerativeAI(
+      this.configService.get<string>('GEMINI_API_KEY'),
+    );
+  }
+
+  // ─── Embedding ────────────────────────────────────────────────────────────────
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    const result = await model.embedContent(text.slice(0, 8000));
+    return result.embedding.values;
+  }
+
+  // ─── Semantic Search via Qdrant ───────────────────────────────────────────────
+
+  async searchSimilarTopics(query: string, documentId: string, topK = 3): Promise<TopicChunk[]> {
+    const queryEmbedding = await this.generateEmbedding(query);
+    const results = await this.qdrantService.searchSimilar(queryEmbedding, documentId, topK);
+
+    return results.map((r) => ({
+      id: r.chunkId,
+      name: r.name,
+      content: r.content,
+      preview: r.content.slice(0, 120),
+    }));
   }
 
   // ─── Text Extraction ─────────────────────────────────────────────────────────
@@ -51,55 +75,41 @@ export class DocumentService {
     throw new BadRequestException('Unsupported file type. Please upload a PDF or DOCX file.');
   }
 
-  // ─── Topic Detection ─────────────────────────────────────────────────────────
+  // ─── Paragraph Chunking (free, no API) ───────────────────────────────────────
 
-  private async detectTopics(text: string): Promise<TopicChunk[]> {
-    const truncated = text.slice(0, MAX_CHARS);
+  private splitIntoChunks(text: string): TopicChunk[] {
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/\n+/g, ' ').trim())
+      .filter((p) => p.length >= MIN_CHUNK_CHARS);
 
-    const prompt = `You are analyzing a document to extract its main topics for an exam question generation system.
+    const chunks: TopicChunk[] = [];
+    let buffer = '';
+    let index = 1;
 
-Read the following document content and identify the main topics or sections (maximum 12 topics).
-
-For each topic:
-1. Give it a clear, concise name (e.g. "Recursion", "OOP Inheritance", "SQL Joins")
-2. Extract ALL the relevant content from the document that belongs to this topic
-3. Generate a short preview (first sentence or key concept, max 120 characters)
-
-Return ONLY a valid JSON object, no markdown, no explanation:
-{
-  "topics": [
-    {
-      "id": "topic_1",
-      "name": "Topic Name Here",
-      "content": "Full extracted content for this topic from the document...",
-      "preview": "Short preview text..."
-    }
-  ]
-}
-
-DOCUMENT CONTENT:
-${truncated}`;
-
-    let response: Anthropic.Message;
-    try {
-      response = await this.anthropic.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }],
-      });
-    } catch (err: any) {
-      if (err?.status === 429) {
-        throw new BadRequestException('AI rate limit reached. Please wait a moment and try again.');
+    for (const para of paragraphs) {
+      if (buffer.length + para.length > MAX_CHUNK_CHARS && buffer.length >= MIN_CHUNK_CHARS) {
+        chunks.push({
+          id: `chunk_${index++}`,
+          name: `Chunk ${index - 1}`,
+          content: buffer.trim(),
+          preview: buffer.trim().slice(0, 120),
+        });
+        buffer = '';
       }
-      throw err;
+      buffer += (buffer ? ' ' : '') + para;
     }
-    const raw = (response.content[0] as Anthropic.TextBlock).text
-      .trim()
-      .replace(/^```(?:json)?\n?/, '')
-      .replace(/\n?```$/, '');
 
-    const parsed = JSON.parse(raw);
-    return parsed.topics as TopicChunk[];
+    if (buffer.trim().length >= MIN_CHUNK_CHARS) {
+      chunks.push({
+        id: `chunk_${index}`,
+        name: `Chunk ${index}`,
+        content: buffer.trim(),
+        preview: buffer.trim().slice(0, 120),
+      });
+    }
+
+    return chunks;
   }
 
   // ─── Main Upload Handler ─────────────────────────────────────────────────────
@@ -111,47 +121,59 @@ ${truncated}`;
     userId: string,
     organizationId: string,
   ) {
-    // Extract raw text
     const text = await this.extractText(buffer, mimetype);
 
     if (!text || text.trim().length < 100) {
       throw new BadRequestException('Document appears to be empty or could not be parsed.');
     }
 
-    // Use Gemini to detect topics
-    const topics = await this.detectTopics(text);
+    const chunks = this.splitIntoChunks(text);
 
-    if (!topics?.length) {
-      throw new BadRequestException('Could not detect topics from this document.');
+    if (!chunks.length) {
+      throw new BadRequestException('Could not extract content from this document.');
     }
 
-    // Store in MongoDB
+    // Store metadata in MongoDB (no embeddings)
     const doc = await this.documentModel.create({
       organizationId,
       userId,
       filename,
-      topics,
+      topics: chunks,
     });
 
-    this.logger.log(`Document processed: ${filename} → ${topics.length} topics`);
+    const documentId = (doc._id as any).toString();
+
+    // Generate embeddings and upsert to Qdrant
+    const qdrantChunks: { embedding: number[]; payload: any }[] = [];
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        try {
+          const embedding = await this.generateEmbedding(chunk.content);
+          qdrantChunks.push({
+            embedding,
+            payload: {
+              documentId,
+              chunkId: chunk.id,
+              name: chunk.name,
+              content: chunk.content,
+            },
+          });
+        } catch (err) {
+          this.logger.warn(`Embedding failed for ${chunk.id}: ${err.message}`);
+        }
+      }),
+    );
+
+    if (qdrantChunks.length) {
+      await this.qdrantService.upsertChunks(qdrantChunks);
+    }
+
+    this.logger.log(`Document processed: ${filename} → ${chunks.length} chunks → ${qdrantChunks.length} indexed in Qdrant`);
 
     return {
-      documentId: (doc._id as any).toString(),
+      documentId,
       filename,
-      topics: topics.map((t) => ({
-        id: t.id,
-        name: t.name,
-        preview: t.preview,
-      })),
+      chunkCount: chunks.length,
     };
-  }
-
-  // ─── Get Topic Content for RAG ────────────────────────────────────────────────
-
-  async getTopicContent(documentId: string, topicId: string): Promise<string | null> {
-    const doc = await this.documentModel.findById(documentId);
-    if (!doc) return null;
-    const topic = doc.topics.find((t) => t.id === topicId);
-    return topic?.content || null;
   }
 }
