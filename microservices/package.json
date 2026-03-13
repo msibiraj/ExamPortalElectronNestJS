@@ -23,6 +23,7 @@
     "start:exam:dev": "nest start exam-service --watch"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@aws-sdk/client-s3": "^3.1002.0",
     "@aws-sdk/s3-request-presigner": "^3.1005.0",
     "@google/generative-ai": "^0.24.1",

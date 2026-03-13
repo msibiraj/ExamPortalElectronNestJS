@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
 import { DocumentService } from './document.service';
 
@@ -125,21 +125,21 @@ BEHAVIOR:
 
 @Injectable()
 export class AiService {
-  private genAI: GoogleGenerativeAI;
+  private anthropic: Anthropic;
 
   constructor(
     private configService: ConfigService,
     @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
     private readonly documentService: DocumentService,
   ) {
-    this.genAI = new GoogleGenerativeAI(
-      this.configService.get<string>('GEMINI_API_KEY'),
-    );
+    this.anthropic = new Anthropic({
+      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
+    });
   }
 
   async chat(
     message: string,
-    history: { role: string; parts: { text: string }[] }[],
+    history: { role: string; parts?: { text: string }[]; content?: string }[],
     userId: string,
     organizationId: string,
     documentId?: string,
@@ -148,7 +148,6 @@ export class AiService {
     let contextSection = '';
 
     if (documentId && topicId) {
-      // ── Document RAG mode: inject the selected topic's content ──
       const topicContent = await this.documentService.getTopicContent(documentId, topicId);
       if (topicContent) {
         contextSection = `\n\n═══════════════════════════════════════════
@@ -158,7 +157,6 @@ ${topicContent.slice(0, 8000)}
 ═══════════════════════════════════════════`;
       }
     } else {
-      // ── General mode: inject question bank topic summary ──
       try {
         const questions: any[] = await firstValueFrom(
           this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, {
@@ -183,15 +181,35 @@ ${topicContent.slice(0, 8000)}
       }
     }
 
-    const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: SYSTEM_PROMPT + contextSection,
-    });
+    // Convert from Gemini history format {role, parts:[{text}]} to Claude format {role, content}
+    const claudeHistory: Anthropic.MessageParam[] = history
+      .map((h) => ({
+        role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: h.parts?.[0]?.text ?? (h.content as string) ?? '',
+      }))
+      .filter((m) => m.content);
 
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(message);
-    const rawText = result.response.text().trim();
+    claudeHistory.push({ role: 'user', content: message });
 
+    let response: Anthropic.Message;
+    try {
+      response = await this.anthropic.messages.create({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT + contextSection,
+        messages: claudeHistory,
+      });
+    } catch (err: any) {
+      if (err?.status === 429) {
+        return {
+          message: 'AI rate limit reached. Please wait a moment and try again.',
+          questions: null,
+        };
+      }
+      throw err;
+    }
+
+    const rawText = (response.content[0] as Anthropic.TextBlock).text.trim();
     const jsonText = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
 
     try {

@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import * as mammoth from 'mammoth';
 import { DocumentChunk, DocumentChunkDocument, TopicChunk } from './schemas/document-chunk.schema';
 
@@ -12,16 +12,16 @@ const MAX_CHARS = 40000;
 @Injectable()
 export class DocumentService {
   private readonly logger = new Logger(DocumentService.name);
-  private genAI: GoogleGenerativeAI;
+  private anthropic: Anthropic;
 
   constructor(
     private configService: ConfigService,
     @InjectModel(DocumentChunk.name, 'ai_db')
     private documentModel: Model<DocumentChunkDocument>,
   ) {
-    this.genAI = new GoogleGenerativeAI(
-      this.configService.get<string>('GEMINI_API_KEY'),
-    );
+    this.anthropic = new Anthropic({
+      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
+    });
   }
 
   // ─── Text Extraction ─────────────────────────────────────────────────────────
@@ -56,8 +56,6 @@ export class DocumentService {
   private async detectTopics(text: string): Promise<TopicChunk[]> {
     const truncated = text.slice(0, MAX_CHARS);
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     const prompt = `You are analyzing a document to extract its main topics for an exam question generation system.
 
 Read the following document content and identify the main topics or sections (maximum 12 topics).
@@ -82,8 +80,23 @@ Return ONLY a valid JSON object, no markdown, no explanation:
 DOCUMENT CONTENT:
 ${truncated}`;
 
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    let response: Anthropic.Message;
+    try {
+      response = await this.anthropic.messages.create({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      });
+    } catch (err: any) {
+      if (err?.status === 429) {
+        throw new BadRequestException('AI rate limit reached. Please wait a moment and try again.');
+      }
+      throw err;
+    }
+    const raw = (response.content[0] as Anthropic.TextBlock).text
+      .trim()
+      .replace(/^```(?:json)?\n?/, '')
+      .replace(/\n?```$/, '');
 
     const parsed = JSON.parse(raw);
     return parsed.topics as TopicChunk[];
