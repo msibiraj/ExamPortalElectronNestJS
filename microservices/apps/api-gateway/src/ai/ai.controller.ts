@@ -2,10 +2,7 @@ import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { RolesGuard } from '../guards/roles.guard';
-import { Roles } from '../decorators/roles.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
-import { UserRole } from '@app/shared';
 
 class ChatMessageDto {
   message: string;
@@ -20,7 +17,7 @@ export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post('chat')
-  @ApiOperation({ summary: 'Chat with AI to generate exam questions (RAG-powered)' })
+  @ApiOperation({ summary: 'Chat with AI to generate exam questions' })
   chat(@Body() dto: ChatMessageDto, @CurrentUser() user: any) {
     return this.aiService.chat(
       dto.message,
@@ -28,13 +25,5 @@ export class AiController {
       user.id,
       user.organizationId,
     );
-  }
-
-  @Post('reindex')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Force re-embed all questions into the vector index' })
-  reindex(@CurrentUser() user: any) {
-    return this.aiService.reindex(user.id, user.organizationId);
   }
 }
