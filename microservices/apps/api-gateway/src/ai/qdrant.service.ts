@@ -4,7 +4,7 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 import { v4 as uuidv4 } from 'uuid';
 
 const COLLECTION_NAME = 'document_chunks';
-const VECTOR_SIZE = 768; // text-embedding-004 dimensions
+const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality: 768
 
 export interface ChunkPayload {
   documentId: string;
@@ -21,7 +21,8 @@ export class QdrantService implements OnModuleInit {
 
   constructor(private configService: ConfigService) {
     this.client = new QdrantClient({
-      url: this.configService.get<string>('QDRANT_URL', 'http://localhost:6333'),
+      url: this.configService.get<string>('QDRANT_URL'),
+      apiKey: this.configService.get<string>('QDRANT_API_KEY'),
     });
   }
 

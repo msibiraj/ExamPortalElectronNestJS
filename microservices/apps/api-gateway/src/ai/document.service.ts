@@ -33,6 +33,7 @@ export class DocumentService {
     const result = await this.genAI.models.embedContent({
       model: 'gemini-embedding-001',
       contents: text.slice(0, 8000),
+      config: { outputDimensionality: 768 },
     });
     return result.embeddings[0].values; 
   }
