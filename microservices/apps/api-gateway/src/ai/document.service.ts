@@ -30,7 +30,7 @@ export class DocumentService {
   // ─── Embedding ────────────────────────────────────────────────────────────────
 
   async generateEmbedding(text: string): Promise<number[]> {
-    const model = this.genAI.getGenerativeModel({ model: 'embedding-001' });
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
     const result = await model.embedContent(text.slice(0, 8000));
     return result.embedding.values;
   }
