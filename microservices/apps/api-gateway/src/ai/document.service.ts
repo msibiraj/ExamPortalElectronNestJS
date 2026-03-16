@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import * as mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { DocumentChunk, DocumentChunkDocument, TopicChunk } from './schemas/document-chunk.schema';
 import { QdrantService } from './qdrant.service';
 
@@ -14,7 +14,7 @@ const MAX_CHUNK_CHARS = 1500;
 @Injectable()
 export class DocumentService {
   private readonly logger = new Logger(DocumentService.name);
-  private genAI: GoogleGenerativeAI;
+  private genAI: GoogleGenAI;
 
   constructor(
     private configService: ConfigService,
@@ -22,17 +22,19 @@ export class DocumentService {
     private documentModel: Model<DocumentChunkDocument>,
     private qdrantService: QdrantService,
   ) {
-    this.genAI = new GoogleGenerativeAI(
-      this.configService.get<string>('GEMINI_API_KEY'),
-    );
+    this.genAI = new GoogleGenAI({
+      apiKey: this.configService.get<string>('GEMINI_API_KEY'),
+    });
   }
 
   // ─── Embedding ────────────────────────────────────────────────────────────────
 
   async generateEmbedding(text: string): Promise<number[]> {
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
-    const result = await model.embedContent(text.slice(0, 8000));
-    return result.embedding.values;
+    const result = await this.genAI.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: text.slice(0, 8000),
+    });
+    return result.embeddings[0].values;
   }
 
   // ─── Semantic Search via Qdrant ───────────────────────────────────────────────
