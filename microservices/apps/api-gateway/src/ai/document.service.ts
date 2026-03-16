@@ -34,7 +34,7 @@ export class DocumentService {
       model: 'gemini-embedding-001',
       contents: text.slice(0, 8000),
     });
-    return result.embeddings[0].values;
+    return result.embeddings[0].values; 
   }
 
   // ─── Semantic Search via Qdrant ───────────────────────────────────────────────
