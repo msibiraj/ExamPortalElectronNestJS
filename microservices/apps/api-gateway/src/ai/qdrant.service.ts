@@ -4,7 +4,7 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 import { v4 as uuidv4 } from 'uuid';
 
 const COLLECTION_NAME = 'document_chunks';
-const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality: 768
+const VECTOR_SIZE = 768; // text-embedding-004 default dimensions
 
 export interface ChunkPayload {
   documentId: string;
