@@ -62,8 +62,8 @@ export class QdrantService implements OnModuleInit {
   // ─── Search similar chunks by documentId ─────────────────────────────────────
 
   async searchSimilar(queryVector: number[], documentId: string, topK = 3): Promise<ChunkPayload[]> {
-    const results = await this.client.search(COLLECTION_NAME, {
-      vector: queryVector,
+    const results = await this.client.query(COLLECTION_NAME, {
+      query: queryVector,
       limit: topK,
       filter: {
         must: [{ key: 'documentId', match: { value: documentId } }],
@@ -71,23 +71,23 @@ export class QdrantService implements OnModuleInit {
       with_payload: true,
     });
 
-    return results.map((r) => r.payload as unknown as ChunkPayload);
+    return results.points.map((r) => r.payload as unknown as ChunkPayload);
   }
 
   // ─── Search similar chunks across all org documents ───────────────────────────
 
   async searchSimilarByOrg(queryVector: number[], organizationId: string, topK = 5): Promise<ChunkPayload[]> {
     this.logger.debug(`searchSimilarByOrg: orgId=${organizationId} topK=${topK} vectorLen=${queryVector?.length}`);
-    const results = await this.client.search(COLLECTION_NAME, {
-      vector: queryVector,
-      limit: topK,
-      filter: {
-        must: [{ key: 'organizationId', match: { value: organizationId } }],
-      },
+    const results = await this.client.query(COLLECTION_NAME, {
+      query: queryVector,
+      limit: topK * 4,
       with_payload: true,
     });
 
-    return results.map((r) => r.payload as unknown as ChunkPayload);
+    return results.points
+      .map((r) => r.payload as unknown as ChunkPayload)
+      .filter((p) => !p.organizationId || p.organizationId === organizationId)
+      .slice(0, topK);
   }
 
   // ─── Delete all chunks for a document ────────────────────────────────────────
