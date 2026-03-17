@@ -24,6 +24,7 @@ export class DocumentService {
   ) {
     this.genAI = new GoogleGenAI({
       apiKey: this.configService.get<string>('GEMINI_API_KEY'),
+      apiVersion: 'v1',
     });
   }
 
