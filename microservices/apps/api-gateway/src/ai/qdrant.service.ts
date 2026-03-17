@@ -64,14 +64,14 @@ export class QdrantService implements OnModuleInit {
   async searchSimilar(queryVector: number[], documentId: string, topK = 3): Promise<ChunkPayload[]> {
     const results = await this.client.query(COLLECTION_NAME, {
       query: queryVector,
-      limit: topK * 4,
+      limit: topK,
       with_payload: true,
+      filter: {
+        must: [{ key: 'documentId', match: { value: documentId } }],
+      },
     });
 
-    return results.points
-      .map((r) => r.payload as unknown as ChunkPayload)
-      .filter((p) => p.documentId === documentId)
-      .slice(0, topK);
+    return results.points.map((r) => r.payload as unknown as ChunkPayload);
   }
 
   // ─── Search similar chunks across all org documents ───────────────────────────

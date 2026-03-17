@@ -151,7 +151,7 @@ export class AiService {
     const relevantTopics = await this.documentService.searchSimilarTopics(
       message,
       documentId || null,
-      3,
+      8,
       organizationId,
     );
     const ragUsed = relevantTopics.length > 0;
