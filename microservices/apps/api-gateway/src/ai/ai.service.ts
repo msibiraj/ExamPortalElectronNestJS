@@ -1,9 +1,6 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
 import Groq from 'groq-sdk';
-import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
 import { DocumentService } from './document.service';
 
 const SYSTEM_PROMPT = `You are an AI assistant for an exam portal that helps create high-quality exam questions.
@@ -131,7 +128,6 @@ export class AiService {
 
   constructor(
     private configService: ConfigService,
-    @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
     private readonly documentService: DocumentService,
   ) {
     this.groq = new Groq({
@@ -142,48 +138,27 @@ export class AiService {
   async chat(
     message: string,
     history: { role: string; parts?: { text: string }[]; content?: string }[],
-    userId: string,
     organizationId: string,
     documentId?: string,
   ) {
     let contextSection = '';
 
-    if (documentId) {
-      // RAG: embed the user's query and retrieve the most relevant chunks from Qdrant
-      const relevantTopics = await this.documentService.searchSimilarTopics(message, documentId);
-      if (relevantTopics.length) {
-        const combined = relevantTopics
-          .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
-          .join('\n\n');
-        contextSection = `\n\n═══════════════════════════════════════════
+    // RAG: always search — scoped to document if provided, otherwise across all org documents
+    const relevantTopics = await this.documentService.searchSimilarTopics(
+      message,
+      documentId || null,
+      3,
+      organizationId,
+    );
+    if (relevantTopics.length) {
+      const combined = relevantTopics
+        .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
+        .join('\n\n');
+      contextSection = `\n\n═══════════════════════════════════════════
 RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content:
 ═══════════════════════════════════════════
 ${combined.slice(0, 10000)}
 ═══════════════════════════════════════════`;
-      }
-    } else {
-      try {
-        const questions: any[] = await firstValueFrom(
-          this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, {
-            filter: {},
-            userId,
-            organizationId,
-          }),
-        );
-        if (questions?.length) {
-          const topicCounts: Record<string, number> = {};
-          questions.forEach((q) => {
-            topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1;
-          });
-          const topicList = Object.entries(topicCounts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([t, c]) => `${t} (${c})`)
-            .join(', ');
-          contextSection = `\n\nQUESTION BANK: ${questions.length} questions. Topics: ${topicList}. Avoid duplicates.`;
-        }
-      } catch {
-        // proceed without context
-      }
     }
 
     // Convert history to Groq format.

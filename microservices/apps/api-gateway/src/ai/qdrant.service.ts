@@ -11,6 +11,7 @@ export interface ChunkPayload {
   chunkId: string;
   name: string;
   content: string;
+  organizationId?: string;
   [key: string]: unknown;
 }
 
@@ -66,6 +67,21 @@ export class QdrantService implements OnModuleInit {
       limit: topK,
       filter: {
         must: [{ key: 'documentId', match: { value: documentId } }],
+      },
+      with_payload: true,
+    });
+
+    return results.map((r) => r.payload as unknown as ChunkPayload);
+  }
+
+  // ─── Search similar chunks across all org documents ───────────────────────────
+
+  async searchSimilarByOrg(queryVector: number[], organizationId: string, topK = 5): Promise<ChunkPayload[]> {
+    const results = await this.client.search(COLLECTION_NAME, {
+      vector: queryVector,
+      limit: topK,
+      filter: {
+        must: [{ key: 'organizationId', match: { value: organizationId } }],
       },
       with_payload: true,
     });

@@ -47,7 +47,6 @@ export class AiController {
     return this.aiService.chat(
       dto.message,
       dto.history || [],
-      user.id,
       user.organizationId,
       dto.documentId,
     );

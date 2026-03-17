@@ -35,21 +35,30 @@ export class DocumentService {
       contents: text.slice(0, 8000),
       config: { outputDimensionality: 768 },
     });
-    return result.embeddings[0].values; 
+    const values = result.embeddings?.[0]?.values;
+    this.logger.debug(`Embedding dimensions: ${values?.length}`);
+    if (!values?.length) throw new Error('Gemini returned empty embedding');
+    return values;
   }
 
   // ─── Semantic Search via Qdrant ───────────────────────────────────────────────
 
-  async searchSimilarTopics(query: string, documentId: string, topK = 3): Promise<TopicChunk[]> {
-    const queryEmbedding = await this.generateEmbedding(query);
-    const results = await this.qdrantService.searchSimilar(queryEmbedding, documentId, topK);
-
-    return results.map((r) => ({
-      id: r.chunkId,
-      name: r.name,
-      content: r.content,
-      preview: r.content.slice(0, 120),
-    }));
+  async searchSimilarTopics(query: string, documentId: string | null, topK = 3, organizationId?: string): Promise<TopicChunk[]> {
+    try {
+      const queryEmbedding = await this.generateEmbedding(query);
+      const results = documentId
+        ? await this.qdrantService.searchSimilar(queryEmbedding, documentId, topK)
+        : await this.qdrantService.searchSimilarByOrg(queryEmbedding, organizationId, topK + 2);
+      return results.map((r) => ({
+        id: r.chunkId,
+        name: r.name,
+        content: r.content,
+        preview: r.content.slice(0, 120),
+      }));
+    } catch (err) {
+      this.logger.error(`searchSimilarTopics failed: ${err.message}`);
+      return [];
+    }
   }
 
   // ─── Text Extraction ─────────────────────────────────────────────────────────
@@ -160,6 +169,7 @@ export class DocumentService {
               chunkId: chunk.id,
               name: chunk.name,
               content: chunk.content,
+              organizationId,
             },
           });
         } catch (err) {
