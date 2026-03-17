@@ -24,7 +24,6 @@ export class DocumentService {
   ) {
     this.genAI = new GoogleGenAI({
       apiKey: this.configService.get<string>('GEMINI_API_KEY'),
-      apiVersion: 'v1',
     });
   }
 
@@ -32,8 +31,9 @@ export class DocumentService {
 
   async generateEmbedding(text: string): Promise<number[]> {
     const result = await this.genAI.models.embedContent({
-      model: 'text-embedding-004',
+      model: 'gemini-embedding-001',
       contents: text.slice(0, 8000),
+      config: { outputDimensionality: 768 },
     });
     const values = result.embeddings?.[0]?.values;
     this.logger.debug(`Embedding dimensions: ${values?.length}`);
