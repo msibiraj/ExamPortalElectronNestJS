@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom } from 'rxjs';
 import Groq from 'groq-sdk';
+import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
 import { DocumentService } from './document.service';
 
 const SYSTEM_PROMPT = `You are an AI assistant for an exam portal that helps create high-quality exam questions.
@@ -128,6 +131,7 @@ export class AiService {
 
   constructor(
     private configService: ConfigService,
+    @Inject(QUESTION_SERVICE) private readonly questionClient: ClientProxy,
     private readonly documentService: DocumentService,
   ) {
     this.groq = new Groq({
@@ -150,7 +154,14 @@ export class AiService {
       3,
       organizationId,
     );
-    if (relevantTopics.length) {
+    const ragUsed = relevantTopics.length > 0;
+    this.logger.log(`RAG: ${ragUsed ? `${relevantTopics.length} chunks retrieved` : 'no chunks found'} | documentId=${documentId || 'none'} | org=${organizationId}`);
+    if (ragUsed) {
+      relevantTopics.forEach((t, i) =>
+        this.logger.debug(`RAG Chunk ${i + 1}: ${t.preview}`),
+      );
+    }
+    if (ragUsed) {
       const combined = relevantTopics
         .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
         .join('\n\n');
@@ -159,6 +170,29 @@ RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content:
 ═══════════════════════════════════════════
 ${combined.slice(0, 10000)}
 ═══════════════════════════════════════════`;
+    }
+
+    // Question bank context — always append so AI knows existing topics
+    try {
+      const questions: any[] = await firstValueFrom(
+        this.questionClient.send(QUESTION_PATTERNS.FIND_ALL, {
+          filter: {},
+          organizationId,
+        }),
+      );
+      if (questions?.length) {
+        const topicCounts: Record<string, number> = {};
+        questions.forEach((q) => {
+          topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1;
+        });
+        const topicList = Object.entries(topicCounts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([t, c]) => `${t} (${c})`)
+          .join(', ');
+        contextSection += `\n\nQUESTION BANK: ${questions.length} questions across these topics: ${topicList}. Avoid generating duplicates.`;
+      }
+    } catch {
+      // proceed without question bank context
     }
 
     // Convert history to Groq format.
@@ -252,6 +286,7 @@ ${combined.slice(0, 10000)}
       return {
         message: parsed.message || '',
         questions: parsed.questions || null,
+        isRag: ragUsed,
       };
     } catch {
       try {
@@ -259,9 +294,10 @@ ${combined.slice(0, 10000)}
         return {
           message: parsed.message || '',
           questions: parsed.questions || null,
+          isRag: ragUsed,
         };
       } catch {
-        return { message: rawText, questions: null };
+        return { message: rawText, questions: null, isRag: false };
       }
     }
   }

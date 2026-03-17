@@ -417,6 +417,11 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
                         ? 'bg-indigo-600 text-white rounded-br-sm'
                         : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
                     }`}>
+                      {!isUser && parsed?.isRag && (
+                        <span className="inline-flex items-center gap-1 mb-1.5 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                          ⚡ RAG
+                        </span>
+                      )}
                       {parsed.message}
                     </div>
                   )}
