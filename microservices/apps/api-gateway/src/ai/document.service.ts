@@ -58,7 +58,7 @@ export class DocumentService {
         preview: r.content.slice(0, 120),
       }));
     } catch (err) {
-      this.logger.error(`searchSimilarTopics failed: ${err.message}`);
+      this.logger.error(`searchSimilarTopics failed: ${JSON.stringify(err?.message ?? err)}`);
       return [];
     }
   }

@@ -77,6 +77,7 @@ export class QdrantService implements OnModuleInit {
   // ─── Search similar chunks across all org documents ───────────────────────────
 
   async searchSimilarByOrg(queryVector: number[], organizationId: string, topK = 5): Promise<ChunkPayload[]> {
+    this.logger.debug(`searchSimilarByOrg: orgId=${organizationId} topK=${topK} vectorLen=${queryVector?.length}`);
     const results = await this.client.search(COLLECTION_NAME, {
       vector: queryVector,
       limit: topK,
