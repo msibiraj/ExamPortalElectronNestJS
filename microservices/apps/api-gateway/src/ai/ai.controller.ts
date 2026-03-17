@@ -9,16 +9,25 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { IsString, IsArray, IsOptional } from 'class-validator';
 import { AiService } from './ai.service';
 import { DocumentService } from './document.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
 
 class ChatMessageDto {
+  @IsString()
   message: string;
+
+  @IsArray()
   history: { role: string; parts: { text: string }[] }[];
-  // Optional — only sent when user selected a topic from an uploaded document
+
+  @IsOptional()
+  @IsString()
   documentId?: string;
+
+  @IsOptional()
+  @IsString()
   topicId?: string;
 }
 
