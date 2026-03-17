@@ -225,9 +225,27 @@ ${combined.slice(0, 10000)}
 
     const rawText = response.choices[0].message.content?.trim() ?? '';
 
-    // Try to extract JSON — handle markdown code blocks and extra text around JSON
+    // Extract JSON — strip markdown code blocks and extra text
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const jsonText = jsonMatch ? jsonMatch[0] : rawText;
+
+    // Repair JSON: Groq sometimes puts literal newlines/tabs inside string values
+    // which makes JSON.parse fail. Fix by escaping control chars inside strings.
+    function repairJson(str: string): string {
+      let result = '';
+      let inString = false;
+      let escape = false;
+      for (const char of str) {
+        if (escape) { result += char; escape = false; continue; }
+        if (char === '\\' && inString) { result += char; escape = true; continue; }
+        if (char === '"') { result += char; inString = !inString; continue; }
+        if (inString && char === '\n') { result += '\\n'; continue; }
+        if (inString && char === '\r') { result += '\\r'; continue; }
+        if (inString && char === '\t') { result += '\\t'; continue; }
+        result += char;
+      }
+      return result;
+    }
 
     try {
       const parsed = JSON.parse(jsonText);
@@ -236,7 +254,15 @@ ${combined.slice(0, 10000)}
         questions: parsed.questions || null,
       };
     } catch {
-      return { message: rawText, questions: null };
+      try {
+        const parsed = JSON.parse(repairJson(jsonText));
+        return {
+          message: parsed.message || '',
+          questions: parsed.questions || null,
+        };
+      } catch {
+        return { message: rawText, questions: null };
+      }
     }
   }
 }
