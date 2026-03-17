@@ -48,7 +48,9 @@ export class DocumentService {
       const queryEmbedding = await this.generateEmbedding(query);
       const results = documentId
         ? await this.qdrantService.searchSimilar(queryEmbedding, documentId, topK)
-        : await this.qdrantService.searchSimilarByOrg(queryEmbedding, organizationId, topK + 2);
+        : organizationId
+          ? await this.qdrantService.searchSimilarByOrg(queryEmbedding, organizationId, topK + 2)
+          : [];
       return results.map((r) => ({
         id: r.chunkId,
         name: r.name,

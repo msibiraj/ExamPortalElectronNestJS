@@ -224,7 +224,10 @@ ${combined.slice(0, 10000)}
     }
 
     const rawText = response.choices[0].message.content?.trim() ?? '';
-    const jsonText = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+
+    // Try to extract JSON — handle markdown code blocks and extra text around JSON
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const jsonText = jsonMatch ? jsonMatch[0] : rawText;
 
     try {
       const parsed = JSON.parse(jsonText);
