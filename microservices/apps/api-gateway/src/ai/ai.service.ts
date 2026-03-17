@@ -241,7 +241,7 @@ ${combined.slice(0, 10000)}
     try {
       response = await this.groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 4096,
+        max_tokens: 16384,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT + contextSection },
           ...groqMessages,

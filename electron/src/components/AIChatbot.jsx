@@ -338,10 +338,22 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
         documentId: document?.documentId || undefined,
       });
 
+      // Fallback: if questions is null but message is itself a JSON string (truncated response),
+      // try to extract questions from it
+      let parsed = res.data;
+      if (!parsed.questions && typeof parsed.message === 'string') {
+        try {
+          const inner = JSON.parse(parsed.message);
+          if (inner.questions?.length) parsed = { ...inner, isRag: parsed.isRag };
+        } catch {
+          // not JSON, use as-is
+        }
+      }
+
       setMessages((prev) => [...prev, {
         role: 'model',
-        parts: [{ text: JSON.stringify(res.data) }],
-        parsed: res.data,
+        parts: [{ text: JSON.stringify(parsed) }],
+        parsed,
       }]);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to get AI response. Check your Gemini API key.');
