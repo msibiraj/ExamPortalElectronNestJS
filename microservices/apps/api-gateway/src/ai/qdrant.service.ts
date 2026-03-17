@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { v4 as uuidv4 } from 'uuid';
 
-const COLLECTION_NAME = 'document_chunks';
+const COLLECTION_NAME = 'document_chunks1';
 const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality: 768
 
 export interface ChunkPayload {
