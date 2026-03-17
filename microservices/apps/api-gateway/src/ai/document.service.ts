@@ -127,6 +127,23 @@ export class DocumentService {
     return chunks;
   }
 
+  // ─── List Documents for Org ──────────────────────────────────────────────────
+
+  async listDocuments(organizationId: string) {
+    const docs = await this.documentModel
+      .find({ organizationId })
+      .select('_id filename topics createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return docs.map((d) => ({
+      documentId: (d._id as any).toString(),
+      filename: d.filename,
+      chunkCount: (d.topics as any[]).length,
+      createdAt: (d as any).createdAt,
+    }));
+  }
+
   // ─── Main Upload Handler ─────────────────────────────────────────────────────
 
   async processDocument(

@@ -255,9 +255,20 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
   const [uploading, setUploading]   = useState(false);
   const [document, setDocument]     = useState(null);   // { documentId, filename, chunkCount }
 
+  // Document selector
+  const [docList, setDocList]         = useState([]);
+  const [showDocPicker, setShowDocPicker] = useState(false);
+
   const bottomRef  = useRef(null);
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
+
+  // Load org documents on mount
+  useEffect(() => {
+    api.get('/ai/documents')
+      .then((res) => setDocList(res.data))
+      .catch(() => {});
+  }, []);
 
   const getApiHistory = () =>
     messages.slice(1).map((m) => ({ role: m.role, parts: m.parts }));
@@ -281,6 +292,7 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setDocument(res.data);
+      setDocList((prev) => [res.data, ...prev.filter((d) => d.documentId !== res.data.documentId)]);
 
       // Add a system message in chat showing the document was loaded
       setMessages((prev) => [...prev, {
@@ -480,15 +492,46 @@ export default function AIChatbot({ onClose, onQuestionsAdded }) {
 
         {/* ── Input area ── */}
         <div className="border-t border-gray-200 bg-white px-4 py-3">
-          {/* Upload button */}
-          <div className="mb-2 flex items-center gap-2">
+          {/* Document selector */}
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
             <input ref={fileRef} type="file" accept=".pdf,.docx,.doc" className="hidden" onChange={handleFileChange} />
+
+            {/* Select existing doc */}
+            <div className="relative">
+              <button
+                onClick={() => setShowDocPicker((v) => !v)}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+              >
+                📂 Select document {docList.length > 0 && <span className="text-gray-400">({docList.length})</span>}
+              </button>
+              {showDocPicker && (
+                <div className="absolute bottom-full mb-1 left-0 z-10 w-64 rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-y-auto">
+                  {docList.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">No documents uploaded yet</p>
+                  ) : (
+                    docList.map((doc) => (
+                      <button
+                        key={doc.documentId}
+                        onClick={() => { setDocument(doc); setShowDocPicker(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-violet-50 hover:text-violet-700 flex items-center justify-between gap-2 ${document?.documentId === doc.documentId ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-700'}`}
+                      >
+                        <span className="truncate">📄 {doc.filename}</span>
+                        <span className="shrink-0 text-gray-400">{doc.chunkCount}c</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Upload new doc */}
             <button onClick={() => fileRef.current?.click()} disabled={uploading}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-              {uploading ? 'Processing...' : '📎 Upload PDF / DOCX'}
+              {uploading ? 'Processing...' : '📎 Upload new'}
             </button>
+
             {document && (
-              <span className="text-xs text-green-600 font-medium">✓ {document.filename}</span>
+              <span className="text-xs text-green-600 font-medium truncate max-w-[120px]">✓ {document.filename}</span>
             )}
           </div>
 

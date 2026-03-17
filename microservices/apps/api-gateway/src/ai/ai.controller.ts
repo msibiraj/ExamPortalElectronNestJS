@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   UploadedFile,
@@ -50,6 +51,12 @@ export class AiController {
       user.organizationId,
       dto.documentId,
     );
+  }
+
+  @Get('documents')
+  @ApiOperation({ summary: 'List all documents uploaded by the organization' })
+  listDocuments(@CurrentUser() user: any) {
+    return this.documentService.listDocuments(user.organizationId);
   }
 
   @Post('upload-document')
