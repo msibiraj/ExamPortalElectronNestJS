@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import Groq from 'groq-sdk';
+import { GoogleGenAI } from '@google/genai';
 import { QUESTION_SERVICE, QUESTION_PATTERNS } from '@app/shared';
 import { DocumentService } from './document.service';
 
@@ -124,10 +125,13 @@ BEHAVIOR:
 - Keep questions grounded in the document content provided (if any)
 - Do NOT generate outside the scope of the provided document content`;
 
+type SimpleMsg = { role: 'user' | 'assistant'; content: string };
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private groq: Groq;
+  private genAI: GoogleGenAI;
 
   constructor(
     private configService: ConfigService,
@@ -137,7 +141,87 @@ export class AiService {
     this.groq = new Groq({
       apiKey: this.configService.get<string>('GROQ_API_KEY'),
     });
+    this.genAI = new GoogleGenAI({
+      apiKey: this.configService.get<string>('GEMINI_API_KEY'),
+    });
   }
+
+  // ─── Gemini 2.0 Flash ────────────────────────────────────────────────────────
+
+  private async callGemini(history: SimpleMsg[], message: string, systemPrompt: string): Promise<string> {
+    const contents = [
+      ...history.map((h) => ({
+        role: h.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: h.content }],
+      })),
+      { role: 'user', parts: [{ text: message || '' }] },
+    ];
+
+    const response = await this.genAI.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        maxOutputTokens: 8192,
+      },
+    });
+
+    return response.text?.trim() ?? '';
+  }
+
+  // ─── Groq llama-3.3-70b (fallback) ───────────────────────────────────────────
+
+  private async callGroq(history: SimpleMsg[], message: string, systemPrompt: string): Promise<string> {
+    const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = [
+      ...history,
+      { role: 'user', content: message || '' },
+    ];
+
+    const response = await this.groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 16384,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...groqMessages,
+      ],
+    });
+
+    return response.choices[0].message.content?.trim() ?? '';
+  }
+
+  // ─── Rate limit detection ─────────────────────────────────────────────────────
+
+  private isRateLimitError(err: any): boolean {
+    return (
+      err?.status === 429 ||
+      err?.statusCode === 429 ||
+      err?.code === 429 ||
+      String(err?.message ?? '').includes('429') ||
+      String(err?.message ?? '').toLowerCase().includes('quota') ||
+      String(err?.message ?? '').toLowerCase().includes('rate') ||
+      String(err?.message ?? '').toLowerCase().includes('resource_exhausted')
+    );
+  }
+
+  // ─── JSON repair ──────────────────────────────────────────────────────────────
+
+  private repairJson(str: string): string {
+    let result = '';
+    let inString = false;
+    let escape = false;
+    for (const char of str) {
+      if (escape) { result += char; escape = false; continue; }
+      if (char === '\\' && inString) { result += char; escape = true; continue; }
+      if (char === '"') { result += char; inString = !inString; continue; }
+      if (inString && char === '\n') { result += '\\n'; continue; }
+      if (inString && char === '\r') { result += '\\r'; continue; }
+      if (inString && char === '\t') { result += '\\t'; continue; }
+      result += char;
+    }
+    return result;
+  }
+
+  // ─── Main chat handler ────────────────────────────────────────────────────────
 
   async chat(
     message: string,
@@ -195,9 +279,7 @@ ${combined.slice(0, 10000)}
       // proceed without question bank context
     }
 
-    // Convert history to Groq format.
-    // Assistant messages are stored as JSON strings on the frontend — extract just the readable text.
-    type SimpleMsg = { role: 'user' | 'assistant'; content: string };
+    // Build shared message history
     const historyMessages: SimpleMsg[] = history
       .map((h) => {
         const raw = String(h.parts?.[0]?.text ?? h.content ?? '').trim();
@@ -219,67 +301,47 @@ ${combined.slice(0, 10000)}
       })
       .filter((m) => m.content.length > 0)
       .reduce<SimpleMsg[]>((acc, m) => {
-        // Merge consecutive same-role messages (can happen after filtering empties)
         if (acc.length > 0 && acc[acc.length - 1].role === m.role) return acc;
         acc.push(m);
         return acc;
       }, []);
 
-    // Ensure history ends with assistant so the appended user message alternates correctly
+    // Ensure history ends with assistant so user message alternates correctly
     while (historyMessages.length > 0 && historyMessages[historyMessages.length - 1].role === 'user') {
       historyMessages.pop();
     }
 
-    const groqMessages: Groq.Chat.ChatCompletionMessageParam[] = [
-      ...historyMessages,
-      { role: 'user', content: message || '' },
-    ];
+    const fullPrompt = SYSTEM_PROMPT + contextSection;
 
-    this.logger.debug(`Sending ${groqMessages.length} messages to Groq:\n${JSON.stringify(groqMessages, null, 2)}`);
-
-    let response: Groq.Chat.ChatCompletion;
+    // ── Call Gemini first, fall back to Groq on rate limit ──
+    let rawText: string;
     try {
-      response = await this.groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 16384,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT + contextSection },
-          ...groqMessages,
-        ],
-      });
-    } catch (err: any) {
-      if (err?.status === 429) {
-        return {
-          message: 'AI rate limit reached. Please wait a moment and try again.',
-          questions: null,
-        };
+      this.logger.debug(`Sending to Gemini 2.0 Flash (${historyMessages.length + 1} messages)`);
+      rawText = await this.callGemini(historyMessages, message, fullPrompt);
+      this.logger.log('Response from: Gemini 2.0 Flash');
+    } catch (geminiErr: any) {
+      if (this.isRateLimitError(geminiErr)) {
+        this.logger.warn('Gemini rate limit reached — falling back to Groq llama-3.3-70b-versatile');
+        try {
+          rawText = await this.callGroq(historyMessages, message, fullPrompt);
+          this.logger.log('Response from: Groq llama-3.3-70b-versatile (fallback)');
+        } catch (groqErr: any) {
+          if (groqErr?.status === 429) {
+            return {
+              message: 'Both AI providers have reached their rate limits. Please wait a few minutes and try again.',
+              questions: null,
+            };
+          }
+          throw groqErr;
+        }
+      } else {
+        throw geminiErr;
       }
-      throw err;
     }
-
-    const rawText = response.choices[0].message.content?.trim() ?? '';
 
     // Extract JSON — strip markdown code blocks and extra text
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const jsonText = jsonMatch ? jsonMatch[0] : rawText;
-
-    // Repair JSON: Groq sometimes puts literal newlines/tabs inside string values
-    // which makes JSON.parse fail. Fix by escaping control chars inside strings.
-    function repairJson(str: string): string {
-      let result = '';
-      let inString = false;
-      let escape = false;
-      for (const char of str) {
-        if (escape) { result += char; escape = false; continue; }
-        if (char === '\\' && inString) { result += char; escape = true; continue; }
-        if (char === '"') { result += char; inString = !inString; continue; }
-        if (inString && char === '\n') { result += '\\n'; continue; }
-        if (inString && char === '\r') { result += '\\r'; continue; }
-        if (inString && char === '\t') { result += '\\t'; continue; }
-        result += char;
-      }
-      return result;
-    }
 
     try {
       const parsed = JSON.parse(jsonText);
@@ -290,7 +352,7 @@ ${combined.slice(0, 10000)}
       };
     } catch {
       try {
-        const parsed = JSON.parse(repairJson(jsonText));
+        const parsed = JSON.parse(this.repairJson(jsonText));
         return {
           message: parsed.message || '',
           questions: parsed.questions || null,
