@@ -64,7 +64,7 @@ export class QdrantService implements OnModuleInit {
   async searchSimilar(queryVector: number[], documentId: string, topK = 3): Promise<ChunkPayload[]> {
     const results = await this.client.query(COLLECTION_NAME, {
       query: queryVector,
-      limit: topK * 10,
+      limit: topK * 4,
       with_payload: true,
     });
 
