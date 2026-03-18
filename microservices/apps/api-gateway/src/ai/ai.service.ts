@@ -111,14 +111,13 @@ GENERATION RULES:
 - Avoid duplicates already in the question bank
 
 DOCUMENT-BASED GENERATION (when context is provided):
-- Generate questions ONLY about the content in the retrieved chunks
-- For explicit facts (name, date, number): use them verbatim as the correct answer
-- For vague or implicit content: make a reasonable inference clearly supported by the text — e.g. listing both frontend and backend skills implies "full-stack developer"
-- Never invent facts with no basis in the context
-- Distractors must be plausible but must NOT be facts from the context
-- Always generate the requested question type regardless of how sparse the content is
-- For sparse content, use reasonable inference and combine related facts across chunks to form meaningful questions
-- Use the document's own terminology, names, and values — do not substitute with generic alternatives`;
+- Read ALL chunks carefully before generating any question
+- The correct answer MUST be a word, phrase, or value that appears VERBATIM in the chunk text — copy it exactly as written
+- Do NOT paraphrase, expand abbreviations, or substitute synonyms
+- If a specific fact the user asked about is NOT present anywhere in the chunks, skip that question and form a different question from what IS present
+- Never guess or assume a fact — if unsure, form a different question
+- Distractors must be plausible alternatives but must NOT appear anywhere in the chunks
+- Use the document's own exact words, abbreviations, and values throughout`;
 
 
 type SimpleMsg = { role: 'user' | 'assistant'; content: string };
