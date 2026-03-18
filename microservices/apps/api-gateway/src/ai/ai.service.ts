@@ -245,9 +245,7 @@ export class AiService {
         .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
         .join('\n\n');
       contextSection = `\n\n═══════════════════════════════════════════
-RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content.
-Every correct answer (isCorrect: true) MUST be a fact explicitly stated in the chunks below.
-Do NOT hallucinate, infer, or guess any answer — only use what is written here.
+RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content:
 ═══════════════════════════════════════════
 ${combined.slice(0, 10000)}
 ═══════════════════════════════════════════`;
