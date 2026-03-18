@@ -123,7 +123,8 @@ BEHAVIOR:
 - For programming questions, always include at least 4 test cases (mix of visible and hidden)
 - For programming questions, always include starter code for each allowed language
 - Keep questions grounded in the document content provided (if any)
-- Do NOT generate outside the scope of the provided document content`;
+- Do NOT generate outside the scope of the provided document content
+- CRITICAL: When document context is provided, the isCorrect:true option MUST be a fact stated directly in the retrieved context. Do NOT invent or assume any facts. Wrong options must be plausible distractors but must NOT accidentally be correct based on the context`;
 
 type SimpleMsg = { role: 'user' | 'assistant'; content: string };
 
@@ -250,7 +251,9 @@ export class AiService {
         .map((t, i) => `[Chunk ${i + 1}]\n${t.content}`)
         .join('\n\n');
       contextSection = `\n\n═══════════════════════════════════════════
-RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content:
+RETRIEVED DOCUMENT CONTEXT (RAG) — Generate questions ONLY from this content.
+Every correct answer (isCorrect: true) MUST be a fact explicitly stated in the chunks below.
+Do NOT hallucinate, infer, or guess any answer — only use what is written here.
 ═══════════════════════════════════════════
 ${combined.slice(0, 10000)}
 ═══════════════════════════════════════════`;
